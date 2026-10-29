@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Misma Palabra · juego de asociación online</title>
+  <meta name="description" content="Cada uno piensa una palabra y se revelan a la vez. ¿En qué ronda pensaréis la misma? Juego de asociación para jugar online con amigos.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='24' cy='32' r='18' fill='%23ff5b3a' stroke='%231d1a16' stroke-width='5'/%3E%3Ccircle cx='40' cy='32' r='18' fill='%232f4bff' stroke='%231d1a16' stroke-width='5' fill-opacity='.85'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+  <div class="deco" aria-hidden="true"><i class="d1"></i><i class="d2"></i><i class="d3"></i></div>
+
+  <header class="top">
+    <a class="logo" href="./">
+      <span class="logo-mark" aria-hidden="true"><i></i><i></i></span>
+      <span class="logo-text"><b>Misma Palabra</b><small>juego de asociación</small></span>
+    </a>
+    <div class="pill" id="room-pill" hidden>
+      Sala <b id="room-pill-code"></b>
+      <span class="live"><span class="dot"></span><span id="conn-label">en línea</span></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- INICIO -->
+    <section class="view" id="v-home">
+      <div class="home-grid">
+        <div class="hero">
+          <span class="sticker pink">¿No coincidís? ¡Otra ronda!</span>
+          <h1>¿En qué ronda pensaréis la <em>misma</em> palabra?</h1>
+          <p class="lead">Cada uno escribe una palabra y se revelan a la vez. Si no coinciden, tocará buscar otra que conecte con las anteriores… hasta que vuestras mentes choquen. Online, sin registro: compartes un enlace y a jugar.</p>
+          <ul class="chips">
+            <li><span class="ico ico-clock" aria-hidden="true"></span>30 / 60 s o a tu medida</li>
+            <li><span class="ico ico-link" aria-hidden="true"></span>Invita con un enlace</li>
+            <li><span class="ico ico-target" aria-hidden="true"></span>Misma palabra = victoria</li>
+          </ul>
+        </div>
+
+        <div class="card start" id="start-card">
+          <div class="invite" id="invite" hidden>
+            <span class="sticker blue">Te han invitado</span>
+            <h2>Sala <span class="mono" id="invite-code"></span></h2>
+            <p class="sub">Escribe tu nombre y entra. La primera ronda empieza en cuanto estéis todos.</p>
+          </div>
+          <h2 class="create-only">Empezar partida</h2>
+          <p class="sub create-only">Crea una sala nueva o entra con el código que te hayan pasado.</p>
+
+          <label class="field">
+            <span class="label">Tu nombre</span>
+            <input id="name" maxlength="16" placeholder="p. ej. Lucía" autocomplete="nickname">
+          </label>
+
+          <button class="btn primary big invite-only" id="btn-join-invite" type="button">Entrar en la sala</button>
+          <button class="link invite-only" id="btn-show-create" type="button">o crea tu propia sala</button>
+
+          <div class="field create-only">
+            <span class="label">Tiempo por ronda</span>
+            <div class="seg" id="seg-time" role="radiogroup" aria-label="Tiempo por ronda">
+              <button type="button" role="radio" data-v="30" aria-checked="true">30 s</button>
+              <button type="button" role="radio" data-v="60" aria-checked="false">60 s</button>
+              <button type="button" role="radio" data-v="custom" aria-checked="false">Otro</button>
+            </div>
+            <label class="custom" id="custom-wrap" hidden>
+              <input id="custom-time" type="number" min="10" max="300" value="45" inputmode="numeric"> segundos
+            </label>
+          </div>
+
+          <div class="field create-only">
+            <span class="label">Jugadores</span>
+            <div class="seg" id="seg-players" role="radiogroup" aria-label="Número de jugadores">
+              <button type="button" role="radio" data-v="2" aria-checked="true">2</button>
+              <button type="button" role="radio" data-v="3" aria-checked="false">3</button>
+              <button type="button" role="radio" data-v="4" aria-checked="false">4</button>
+              <button type="button" role="radio" data-v="5" aria-checked="false">5</button>
+              <button type="button" role="radio" data-v="6" aria-checked="false">6</button>
+            </div>
+          </div>
+
+          <button class="btn primary big create-only" id="btn-create" type="button">Crear sala</button>
+
+          <div class="or create-only"><span>o únete con un código</span></div>
+          <form class="join create-only" id="form-join" autocomplete="off">
+            <input id="join-code" maxlength="6" placeholder="ABC123" aria-label="Código de sala" spellcheck="false">
+            <button class="btn dark" aria-label="Entrar en la sala">Entrar</button>
+          </form>
+
+          <p class="msg" id="home-msg" role="alert"></p>
+        </div>
+      </div>
+
+      <section class="how" aria-labelledby="how-title">
+        <h2 id="how-title">Cómo se juega</h2>
+        <ol class="steps">
+          <li class="step s1">
+            <b>1</b>
+            <h3>Pensad a la vez</h3>
+            <p>Cada jugador escribe una palabra en secreto antes de que se acabe el tiempo.</p>
+          </li>
+          <li class="step s2">
+            <b>2</b>
+            <h3>Revelad</h3>
+            <p>Las palabras se descubren todas a la vez. ¿Habéis dicho lo mismo? ¡Victoria!</p>
+          </li>
+          <li class="step s3">
+            <b>3</b>
+            <h3>Conectad</h3>
+            <p>Si no, buscad una palabra nueva que una las que han salido. Prohibido repetir.</p>
+          </li>
+        </ol>
+        <p class="example">Ejemplo: <span class="w">playa</span> + <span class="w">nieve</span> → <span class="w">vacaciones</span> + <span class="w">frío</span> → <span class="w">invierno</span> + <span class="w">invierno</span> ✦</p>
+      </section>
+    </section>
+
+    <!-- CONECTANDO -->
+    <section class="view center-view" id="v-connecting" hidden>
+      <div class="card center">
+        <div class="spinner" aria-hidden="true"><i></i><i></i></div>
+        <h2 id="connecting-text">Conectando…</h2>
+      </div>
+    </section>
+
+    <!-- SALA DE ESPERA -->
+    <section class="view center-view" id="v-lobby" hidden>
+      <div class="card center lobby">
+        <span class="sticker yellow" id="lobby-tag">Sala privada</span>
+        <h2>Esperando jugadores</h2>
+        <p class="sub" id="lobby-text"></p>
+        <div class="code" id="lobby-code" aria-label="Código de sala"></div>
+        <button class="btn primary" id="btn-copy" type="button">Copiar enlace de invitación</button>
+        <ul class="players" id="lobby-players"></ul>
+        <button class="btn dark" id="btn-start-now" type="button" hidden>Empezar ya</button>
+      </div>
+    </section>
+
+    <!-- RONDA: PENSANDO -->
+    <section class="view game" id="v-think" hidden>
+      <div class="round-head">
+        <div class="round-badge">Ronda <b id="t-round">1</b></div>
+        <div class="timer" id="t-timer" role="timer" aria-live="off">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="track" cx="50" cy="50" r="42"/>
+            <circle class="bar" id="t-bar" cx="50" cy="50" r="42"/>
+          </svg>
+          <span id="t-secs">30</span>
+        </div>
+      </div>
+
+      <div class="card hint">
+        <h3 id="t-hint-title">Primera ronda</h3>
+        <div class="hint-words" id="t-hint"></div>
+        <p class="sub" id="t-hint-sub"></p>
+      </div>
+
+      <form class="card answer" id="form-word" autocomplete="off">
+        <label class="label" for="word">Tu palabra</label>
+        <div class="answer-row">
+          <input id="word" maxlength="24" placeholder="Escribe una palabra…" spellcheck="false" autocapitalize="off">
+          <button class="btn primary" id="btn-word">Enviar</button>
+        </div>
+        <p class="msg" id="word-msg" role="alert"></p>
+      </form>
+
+      <ul class="players status" id="t-players"></ul>
+
+      <details class="used" id="used-box" hidden>
+        <summary>Palabras ya usadas (<span id="used-n">0</span>)</summary>
+        <div class="used-list" id="used-list"></div>
+      </details>
+    </section>
+
+    <!-- RONDA: REVELACIÓN -->
+    <section class="view game" id="v-reveal" hidden>
+      <div class="verdict">
+        <span class="sticker red" id="r-tag">Ronda 1</span>
+        <h2 id="r-title">¡No ha habido suerte!</h2>
+        <p class="sub" id="r-text"></p>
+      </div>
+      <div class="reveal-cards" id="r-cards"></div>
+      <div class="next">
+        <button class="btn primary big" id="btn-next" type="button">Siguiente ronda</button>
+        <p class="sub" id="r-next-info"></p>
+      </div>
+    </section>
+
+    <!-- VICTORIA -->
+    <section class="view game" id="v-won" hidden>
+      <div class="card center win">
+        <span class="sticker yellow">¡Mentes gemelas!</span>
+        <h2 id="w-title">Lo conseguisteis</h2>
+        <div class="big-word" id="w-word"></div>
+        <ol class="timeline" id="w-history"></ol>
+        <div class="win-actions">
+          <button class="btn primary big" id="btn-again" type="button">Jugar otra vez</button>
+          <p class="sub" id="w-wait" hidden>Esperando a que el anfitrión empiece otra partida…</p>
+          <a class="link" href="./">Salir al inicio</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- SALA CERRADA / ERROR -->
+    <section class="view center-view" id="v-closed" hidden>
+      <div class="card center">
+        <span class="sticker red">Vaya…</span>
+        <h2 id="closed-title">La sala se ha cerrado</h2>
+        <p class="sub" id="closed-text"></p>
+        <a class="btn primary" href="./">Volver al inicio</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">Misma Palabra · un juego para pensar a la vez</footer>
+  <div class="confetti" id="confetti" aria-hidden="true"></div>
+
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="juego.js"></script>
+</body>
+</html>
