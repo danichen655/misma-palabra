@@ -9,7 +9,7 @@ const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascrip
 
 http.createServer((req, res) => {
   const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const file = path.join(root, urlPath === '/' ? 'index.html' : urlPath);
+  const file = path.join(root, urlPath.endsWith('/') ? `${urlPath}index.html` : urlPath);
   if (!file.startsWith(root)) { res.writeHead(403).end(); return; }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404).end('No encontrado'); return; }

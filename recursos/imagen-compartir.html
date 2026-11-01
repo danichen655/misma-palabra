@@ -1,8 +1,9 @@
 <!doctype html>
 <!--
   Fuente de compartir.png (vista previa al pegar el enlace en redes y chats).
-  Para regenerarla:
-  chrome --headless --hide-scrollbars --window-size=1200,630 --virtual-time-budget=6000 --screenshot=compartir.png recursos/imagen-compartir.html
+  Para regenerarlas (español y chino):
+  chrome --headless --hide-scrollbars --window-size=1200,630 --virtual-time-budget=8000 --screenshot=compartir.png file:///…/recursos/imagen-compartir.html
+  chrome --headless --hide-scrollbars --window-size=1200,630 --virtual-time-budget=8000 --screenshot=compartir-zh.png "file:///…/recursos/imagen-compartir.html#zh"
 -->
 <html lang="es">
 <head>
@@ -37,7 +38,10 @@
     font-style: normal; display: inline-block; background: #ffc93c; padding: 0 .14em;
     border: 4px solid #1d1a16; border-radius: 16px; box-shadow: 6px 6px 0 #1d1a16; transform: rotate(-2.5deg);
   }
-  .zh { margin-top: 26px; font-family: 'Noto Sans SC', sans-serif; font-weight: 900; font-size: 38px; }
+  .sub { margin-top: 26px; font-size: 32px; font-weight: 600; color: #4a443b; }
+  body.zh, body.zh .sub { font-family: 'Noto Sans SC', sans-serif; }
+  body.zh h1 { font-size: 84px; font-weight: 900; letter-spacing: 0; line-height: 1.2; }
+  body.zh .brand b { font-weight: 900; }
 
   .row { margin-top: auto; display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 800; }
   .w { background: #fffdf8; border: 4px solid #1d1a16; border-radius: 14px; padding: 4px 18px; box-shadow: 4px 4px 0 #1d1a16; }
@@ -54,16 +58,31 @@
   <div class="wrap">
     <div class="brand">
       <span class="mark"><i></i><i></i></span>
-      <b>Misma Palabra</b><span>· 想到一块儿</span>
+      <b id="brand">Misma Palabra</b>
     </div>
-    <h1>¿En qué ronda pensaréis la <em>misma</em> palabra?</h1>
-    <p class="zh">你们会在第几轮想到同一个词？</p>
+    <h1 id="title">¿En qué ronda pensaréis la <em>misma</em> palabra?</h1>
+    <p class="sub" id="sub">Juego de asociación online · gratis · invita con un enlace</p>
     <div class="row">
-      <span class="w">playa</span><span class="w">nieve</span>
+      <span class="w" id="w1">playa</span><span class="w" id="w2">nieve</span>
       <span class="arrow">→</span>
-      <span class="w win">invierno</span>
-      <span class="cta">¡Juega gratis!</span>
+      <span class="w win" id="w3">invierno</span>
+      <span class="cta" id="cta">¡Juega gratis!</span>
     </div>
   </div>
+  <script>
+    // imagen-compartir.html#zh genera la versión china (compartir-zh.png).
+    if (location.hash === '#zh') {
+      document.documentElement.lang = 'zh-CN';
+      document.body.classList.add('zh');
+      const set = (id, html) => { document.getElementById(id).innerHTML = html; };
+      set('brand', '想到一块儿');
+      set('title', '你们会在第几轮想到<em>同一个</em>词？');
+      set('sub', '多人在线联想小游戏 · 免费 · 发个链接就能玩');
+      set('w1', '海滩');
+      set('w2', '雪');
+      set('w3', '冬天');
+      set('cta', '免费开玩！');
+    }
+  </script>
 </body>
 </html>
