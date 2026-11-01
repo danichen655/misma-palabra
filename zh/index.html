@@ -1,0 +1,46 @@
+<!doctype html>
+<!--
+  Entrada en chino: los enlaces compartidos desde la versión china apuntan aquí
+  para que WhatsApp, WeChat, Telegram… muestren la vista previa en chino.
+  Los robots de vista previa no ejecutan JavaScript; las personas sí, y pasan
+  al juego con ?lang=zh conservando el resto de la URL (p. ej. ?sala=CÓDIGO).
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>想到一块儿｜多人联想小游戏</title>
+  <meta name="description" content="每人写一个词，同时揭晓。你们会在第几轮想到同一个词？和朋友在线一起玩的免费联想小游戏。">
+  <meta name="theme-color" content="#f3ead8">
+  <link rel="canonical" href="https://danichen655.github.io/misma-palabra/zh/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="想到一块儿">
+  <meta property="og:title" content="想到一块儿 · 你们会在第几轮想到同一个词？">
+  <meta property="og:description" content="在线联想小游戏：每人写一个词，同时揭晓，看看你们第几轮能想到一块儿。免费，发个链接就能玩。">
+  <meta property="og:url" content="https://danichen655.github.io/misma-palabra/zh/">
+  <meta property="og:image" content="https://danichen655.github.io/misma-palabra/compartir-zh.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="想到一块儿：你们会在第几轮想到同一个词？">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="想到一块儿 · 你们会在第几轮想到同一个词？">
+  <meta name="twitter:description" content="免费在线联想小游戏，发个链接就能和朋友一起玩。">
+  <meta name="twitter:image" content="https://danichen655.github.io/misma-palabra/compartir-zh.png">
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    params.set('lang', 'zh');
+    location.replace(`../?${params}${location.hash}`);
+  </script>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f3ead8; color: #1d1a16; font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif; }
+    a { color: inherit; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <p><a href="../?lang=zh">进入「想到一块儿」</a></p>
+</body>
+</html>

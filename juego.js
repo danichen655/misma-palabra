@@ -445,8 +445,14 @@ function onMessage(msg) {
 
 function hostNow() { return Date.now() + app.offset; }
 
+// Quien juega en chino comparte la entrada /zh/, así la vista previa del enlace sale en chino.
+function shareBase() {
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+  return lang === 'zh' ? `${base}zh/` : base;
+}
+
 function inviteLink(code) {
-  return `${location.origin}${location.pathname}?sala=${code}`;
+  return `${shareBase()}?sala=${code}`;
 }
 
 function render() {
@@ -627,8 +633,7 @@ function resultText() {
     return `${t('share_round', { n: h.round })}${h.words.map((w) => w.word || '—').join(sep)}${isLast ? ' ✨' : ''}`;
   });
   if (R.history.length > SHARE_ROUNDS) rounds.unshift('…');
-  const url = `${location.origin}${location.pathname}${lang === 'zh' ? '?lang=zh' : ''}`;
-  return [head, '', ...rounds, '', t('share_cta', { url })].join('\n');
+  return [head, '', ...rounds, '', t('share_cta', { url: shareBase() })].join('\n');
 }
 
 async function shareResult() {
