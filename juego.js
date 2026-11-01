@@ -45,6 +45,9 @@ save('session', 'mp-id', me.id);
 /* ---------- Idioma ---------- */
 
 let lang = (() => {
+  // Un enlace compartido desde la versión china lleva ?lang=zh.
+  const fromUrl = new URLSearchParams(location.search).get('lang');
+  if (fromUrl === 'es' || fromUrl === 'zh') return fromUrl;
   const saved = load('local', 'mp-lang');
   if (saved === 'es' || saved === 'zh') return saved;
   return /^zh\b/i.test(navigator.language || '') ? 'zh' : 'es';
@@ -610,6 +613,46 @@ function renderWon() {
   if (app.celebrated !== key) { app.celebrated = key; confetti(); }
 }
 
+const SHARE_ROUNDS = 8;
+
+// Texto para pegar en un chat: cabecera, las rondas con sus palabras y el enlace al juego.
+function resultText() {
+  const R = app.room;
+  const head = R.synonym
+    ? t('share_head_syn', { n: R.round })
+    : R.round === 1 ? t('share_first') : t('share_head', { n: R.round });
+  const rounds = R.history.slice(-SHARE_ROUNDS).map((h, i, list) => {
+    const isLast = i === list.length - 1;
+    const sep = isLast ? (R.synonym ? ' ≈ ' : ' = ') : ' · ';
+    return `${t('share_round', { n: h.round })}${h.words.map((w) => w.word || '—').join(sep)}${isLast ? ' ✨' : ''}`;
+  });
+  if (R.history.length > SHARE_ROUNDS) rounds.unshift('…');
+  const url = `${location.origin}${location.pathname}${lang === 'zh' ? '?lang=zh' : ''}`;
+  return [head, '', ...rounds, '', t('share_cta', { url })].join('\n');
+}
+
+async function shareResult() {
+  const text = resultText();
+  const btn = $('#btn-share');
+  // En el móvil abre el menú de compartir del sistema (WhatsApp, Telegram…); en el ordenador, copia.
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try {
+      await navigator.share({ text });
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = t('share_copied');
+    btn.classList.add('done');
+    setTimeout(() => { btn.textContent = t('btn_share'); btn.classList.remove('done'); }, 2500);
+  } catch {
+    window.prompt(t('share_prompt'), text);
+  }
+}
+
 function tick() {
   const R = app.room;
   if (!R || app.closed) return;
@@ -724,6 +767,11 @@ function init() {
   $('#btn-lang').addEventListener('click', () => {
     lang = lang === 'es' ? 'zh' : 'es';
     save('local', 'mp-lang', lang);
+    const params = new URLSearchParams(location.search);
+    if (params.has('lang')) {
+      params.delete('lang');
+      history.replaceState(null, '', location.pathname + (params.size ? `?${params}` : ''));
+    }
     applyLang();
   });
 
@@ -802,6 +850,7 @@ function init() {
   $('#btn-next').addEventListener('click', () => send({ t: 'next' }));
   $('#btn-agree').addEventListener('click', () => send({ t: 'agree' }));
   $('#btn-again').addEventListener('click', () => send({ t: 'again' }));
+  $('#btn-share').addEventListener('click', shareResult);
 
   applyLang();
   setInterval(tick, 200);
