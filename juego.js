@@ -6,6 +6,7 @@
  * los demás se conectan a él por WebRTC (PeerJS). El anfitrión guarda el
  * estado de la partida y lo reenvía a todos tras cada cambio; las palabras
  * de la ronda en curso solo las conoce él hasta el momento de revelarlas.
+ * Los mensajes viajan como claves de texto, así cada jugador los ve en su idioma.
  */
 
 const PREFIX = 'misma-palabra-v1-';
@@ -41,6 +42,55 @@ const me = {
 };
 save('session', 'mp-id', me.id);
 
+/* ---------- Idioma ---------- */
+
+let lang = (() => {
+  const saved = load('local', 'mp-lang');
+  if (saved === 'es' || saved === 'zh') return saved;
+  return /^zh\b/i.test(navigator.language || '') ? 'zh' : 'es';
+})();
+
+function t(key, params = {}) {
+  const value = TEXTS[lang][key] ?? TEXTS.es[key] ?? key;
+  if (typeof value === 'function') return value(params);
+  return value.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? ''));
+}
+
+function joinList(items) {
+  try {
+    return new Intl.ListFormat(lang === 'zh' ? 'zh' : 'es', { type: 'conjunction' }).format(items);
+  } catch {
+    return items.join(', ');
+  }
+}
+
+// Textos sueltos (avisos, "conectando…") que hay que volver a traducir al cambiar de idioma.
+const dynamic = new Map();
+
+function setText(sel, key, params, ok = false) {
+  dynamic.set(sel, { key, params, ok });
+  paintText(sel);
+}
+
+function paintText(sel) {
+  const el = $(sel);
+  const entry = dynamic.get(sel);
+  el.textContent = entry?.key ? t(entry.key, entry.params) : '';
+  el.classList.toggle('ok', !!entry?.ok);
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'es';
+  document.title = t('doc_title');
+  $('meta[name="description"]').content = t('doc_desc');
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-html]')) el.innerHTML = t(el.dataset.i18nHtml);
+  for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t(el.dataset.i18nPh);
+  for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
+  for (const sel of dynamic.keys()) paintText(sel);
+  render();
+}
+
 /* ---------- Palabras ---------- */
 
 const ARTICLES = /^(el|la|los|las|lo|un|una|unos|unas)\s+/;
@@ -48,6 +98,7 @@ const ARTICLES = /^(el|la|los|las|lo|un|una|unos|unas)\s+/;
 // Clave de comparación: sin mayúsculas, tildes, signos ni artículo inicial (la ñ se respeta).
 function norm(word) {
   return String(word)
+    .normalize('NFKC')
     .toLowerCase()
     .normalize('NFD')
     .replace(/ñ/g, 'ñ')
@@ -74,9 +125,9 @@ function usedWords(history) {
 }
 
 function wordError(word, history) {
-  if (!norm(word)) return 'Escribe una palabra.';
+  if (!norm(word)) return { key: 'err_empty' };
   const used = usedWords(history);
-  if (used.has(norm(word))) return `«${used.get(norm(word))}» ya ha salido. Busca otra.`;
+  if (used.has(norm(word))) return { key: 'err_used', params: { word: used.get(norm(word)) } };
   return null;
 }
 
@@ -97,7 +148,8 @@ function startHosting(settings, attempt = 0) {
     app.peer = peer;
     host.room = {
       code, settings, game: 0, players: [], phase: 'lobby', round: 0,
-      endsAt: 0, revealEndsAt: 0, submitted: {}, ready: {}, history: [], winWord: null,
+      endsAt: 0, revealEndsAt: 0, submitted: {}, ready: {}, agree: {},
+      history: [], winWords: [], synonym: false,
     };
     hostJoin(me.id, me.name, null);
     setInterval(hostTick, 250);
@@ -127,7 +179,7 @@ function startHosting(settings, attempt = 0) {
       startHosting(settings, attempt + 1);
     } else if (!host.room) {
       peer.destroy();
-      backHome('No se pudo crear la sala. Revisa tu conexión e inténtalo de nuevo.');
+      backHome('create_fail');
     } else {
       console.warn('PeerJS:', err.type, err);
     }
@@ -139,7 +191,7 @@ function startHosting(settings, attempt = 0) {
 }
 
 function cleanName(raw) {
-  return String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 16) || 'Anónimo';
+  return String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 16) || '???';
 }
 
 function hostJoin(pid, name, conn) {
@@ -147,8 +199,8 @@ function hostJoin(pid, name, conn) {
   if (!pid) return null;
   let player = R.players.find((p) => p.id === pid);
   if (!player) {
-    if (R.phase !== 'lobby') return hostReject(conn, 'La partida de esta sala ya ha empezado.');
-    if (R.players.length >= R.settings.max) return hostReject(conn, 'La sala está llena.');
+    if (R.phase !== 'lobby') return hostReject(conn, 'err_started');
+    if (R.players.length >= R.settings.max) return hostReject(conn, 'err_full');
     const taken = new Set(R.players.map((p) => p.color));
     const color = COLORS.find((c) => !taken.has(c)) || COLORS[R.players.length % COLORS.length];
     player = { id: pid, name, color, online: true };
@@ -163,9 +215,9 @@ function hostJoin(pid, name, conn) {
   return pid;
 }
 
-function hostReject(conn, text) {
+function hostReject(conn, key) {
   if (conn) {
-    const send = () => { conn.send({ t: 'error', msg: text }); setTimeout(() => conn.close(), 500); };
+    const send = () => { conn.send({ t: 'error', key }); setTimeout(() => conn.close(), 500); };
     conn.open ? send() : conn.on('open', send);
   }
   return null;
@@ -183,6 +235,12 @@ function hostLeave(pid) {
   if (!checkProgress()) broadcast();
 }
 
+// Solo se puede votar "es lo mismo" si todos escribieron algo en la última ronda.
+function canAgree(R) {
+  const last = R.history[R.history.length - 1];
+  return !!last && last.words.every((w) => w.word);
+}
+
 function hostAction(pid, msg) {
   const R = host.room;
   switch (msg.t) {
@@ -190,7 +248,7 @@ function hostAction(pid, msg) {
       if (R.phase !== 'thinking' || R.submitted[pid]) return;
       const word = cleanWord(msg.word);
       const err = wordError(word, R.history);
-      if (err) return reply(pid, { t: 'reject', msg: err });
+      if (err) return reply(pid, { t: 'reject', err });
       host.words[pid] = word;
       R.submitted[pid] = true;
       reply(pid, { t: 'accepted', word });
@@ -200,6 +258,13 @@ function hostAction(pid, msg) {
     case 'next':
       if (R.phase !== 'reveal') return;
       R.ready[pid] = true;
+      delete R.agree[pid];
+      if (!checkProgress()) broadcast();
+      break;
+    case 'agree':
+      if (R.phase !== 'reveal' || !canAgree(R)) return;
+      R.agree[pid] = true;
+      delete R.ready[pid];
       if (!checkProgress()) broadcast();
       break;
     case 'start':
@@ -218,7 +283,10 @@ function checkProgress() {
   const R = host.room;
   const online = R.players.filter((p) => p.online);
   if (R.phase === 'thinking' && online.every((p) => R.submitted[p.id])) { reveal(); return true; }
-  if (R.phase === 'reveal' && online.every((p) => R.ready[p.id])) { nextRound(); return true; }
+  if (R.phase === 'reveal') {
+    if (online.every((p) => R.agree[p.id])) { winBySynonym(); return true; }
+    if (online.every((p) => R.ready[p.id] || R.agree[p.id])) { nextRound(); return true; }
+  }
   return false;
 }
 
@@ -227,7 +295,8 @@ function startGame() {
   R.game += 1;
   R.round = 0;
   R.history = [];
-  R.winWord = null;
+  R.winWords = [];
+  R.synonym = false;
   nextRound();
 }
 
@@ -237,6 +306,7 @@ function nextRound() {
   R.phase = 'thinking';
   R.submitted = {};
   R.ready = {};
+  R.agree = {};
   host.words = {};
   R.endsAt = Date.now() + R.settings.seconds * 1000;
   broadcast();
@@ -249,19 +319,32 @@ function reveal() {
   const keys = words.map((w) => norm(w.word));
   if (keys.length > 1 && keys.every((k) => k && k === keys[0])) {
     R.phase = 'won';
-    R.winWord = words[0].word;
+    R.winWords = [words[0].word];
   } else {
     R.phase = 'reveal';
     R.ready = {};
+    R.agree = {};
     R.revealEndsAt = Date.now() + REVEAL_MS;
   }
+  broadcast();
+}
+
+function winBySynonym() {
+  const R = host.room;
+  const last = R.history[R.history.length - 1];
+  const unique = new Map();
+  for (const w of last.words) if (!unique.has(norm(w.word))) unique.set(norm(w.word), w.word);
+  R.phase = 'won';
+  R.synonym = true;
+  R.winWords = [...unique.values()];
   broadcast();
 }
 
 function hostTick() {
   const R = host.room;
   if (R.phase === 'thinking' && Date.now() >= R.endsAt) reveal();
-  else if (R.phase === 'reveal' && Date.now() >= R.revealEndsAt) nextRound();
+  // Mientras alguien proponga que es lo mismo, la cuenta atrás espera a que decidan todos.
+  else if (R.phase === 'reveal' && Object.keys(R.agree).length === 0 && Date.now() >= R.revealEndsAt) nextRound();
 }
 
 function reply(pid, msg) {
@@ -278,12 +361,12 @@ function broadcast() {
 /* ---------- Invitado ---------- */
 
 function joinRoom(code) {
-  showView('connecting', `Entrando en la sala ${code}…`);
+  showView('connecting', 'joining', { code });
   const peer = new Peer({ debug: 0 });
   let opened = false;
 
   const giveUp = setTimeout(() => {
-    if (!opened) { peer.destroy(); backHome(`No se pudo conectar con la sala ${code}.`); }
+    if (!opened) { peer.destroy(); backHome('join_timeout', { code }); }
   }, 25000);
 
   peer.on('open', () => {
@@ -298,7 +381,7 @@ function joinRoom(code) {
     });
     conn.on('data', onMessage);
     conn.on('close', () => {
-      if (opened && !app.closed) closeRoom('La sala se ha cerrado', 'El anfitrión ha salido o se ha perdido la conexión.');
+      if (opened && !app.closed) closeRoom();
     });
   });
 
@@ -306,9 +389,8 @@ function joinRoom(code) {
     if (opened) { console.warn('PeerJS:', err.type, err); return; }
     clearTimeout(giveUp);
     peer.destroy();
-    backHome(err.type === 'peer-unavailable'
-      ? `No hay ninguna sala abierta con el código ${code}.`
-      : 'No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.');
+    if (err.type === 'peer-unavailable') backHome('no_room', { code });
+    else backHome('net_fail');
   });
 }
 
@@ -326,9 +408,9 @@ const app = {
 
 const VIEWS = ['home', 'connecting', 'lobby', 'think', 'reveal', 'won', 'closed'];
 
-function showView(name, connectingText) {
+function showView(name, connectingKey, params) {
   for (const v of VIEWS) $('#v-' + v).hidden = v !== name;
-  if (connectingText) $('#connecting-text').textContent = connectingText;
+  if (connectingKey) setText('#connecting-text', connectingKey, params);
 }
 
 function onMessage(msg) {
@@ -345,7 +427,7 @@ function onMessage(msg) {
       break;
     case 'reject':
       app.pending = false;
-      setMsg('#word-msg', msg.msg);
+      setText('#word-msg', msg.err?.key, msg.err?.params);
       $('#word').disabled = false;
       $('#btn-word').disabled = false;
       $('#word').focus();
@@ -353,7 +435,7 @@ function onMessage(msg) {
     case 'error':
       app.closed = true;
       app.peer?.destroy();
-      backHome(msg.msg);
+      backHome(msg.key);
       break;
   }
 }
@@ -386,25 +468,25 @@ function avatar(p) {
 function renderLobby() {
   const R = app.room;
   const missing = R.settings.max - R.players.length;
-  $('#lobby-tag').textContent = `Sala privada · ${R.settings.max} jugadores · ${R.settings.seconds} s`;
+  $('#lobby-tag').textContent = t('lobby_tag', { max: R.settings.max, secs: R.settings.seconds });
   $('#lobby-text').textContent = missing > 0
-    ? `Hay ${R.players.length} de ${R.settings.max}. Pasa el enlace a tus amigos: la primera ronda empieza sola cuando estéis todos.`
-    : 'Ya estáis todos. ¡Empezamos!';
+    ? t('lobby_wait', { n: R.players.length, max: R.settings.max })
+    : t('lobby_full');
   $('#lobby-code').innerHTML = [...R.code].map((c) => `<span>${esc(c)}</span>`).join('');
 
-  let html = R.players.map((p) => `<li>${avatar(p)}<span>${esc(p.name)}${p.id === me.id ? ' <small>tú</small>' : ''}${p.id === R.players[0]?.id ? ' <small>anfitrión</small>' : ''}</span></li>`).join('');
-  for (let i = 0; i < missing; i++) html += '<li class="empty"><span class="avatar">?</span>Esperando…</li>';
+  let html = R.players.map((p) => `<li>${avatar(p)}<span>${esc(p.name)}${p.id === me.id ? ` <small>${esc(t('you'))}</small>` : ''}${p.id === R.players[0]?.id ? ` <small>${esc(t('host_tag'))}</small>` : ''}</span></li>`).join('');
+  for (let i = 0; i < missing; i++) html += `<li class="empty"><span class="avatar">?</span>${esc(t('waiting_slot'))}</li>`;
   $('#lobby-players').innerHTML = html;
 
   const canStart = app.role === 'host' && missing > 0 && R.players.length >= 2;
   $('#btn-start-now').hidden = !canStart;
-  $('#btn-start-now').textContent = `Empezar ya con ${R.players.length}`;
+  $('#btn-start-now').textContent = t('start_now', { n: R.players.length });
 }
 
 function wordChip(w) {
   return w.word
     ? `<span class="word-chip"><i style="background:${esc(w.color)}"></i>${esc(w.word)}</span>`
-    : `<span class="word-chip none"><i style="background:${esc(w.color)}"></i>sin palabra</span>`;
+    : `<span class="word-chip none"><i style="background:${esc(w.color)}"></i>${esc(t('no_word'))}</span>`;
 }
 
 function renderThinking() {
@@ -419,41 +501,41 @@ function renderThinking() {
     app.myWord = null;
     app.pending = false;
     input.value = '';
-    setMsg('#word-msg', '');
+    setText('#word-msg', null);
     setTimeout(() => input.focus(), 50);
   }
 
-  $('#t-round').textContent = R.round;
+  $('#t-round').innerHTML = t('round_badge', { n: R.round });
   const last = R.history[R.history.length - 1];
   if (!last) {
-    $('#t-hint-title').textContent = 'Primera ronda';
+    $('#t-hint-title').textContent = t('first_title');
     $('#t-hint').innerHTML = '';
-    $('#t-hint-sub').textContent = 'Escribe la primera palabra que se te pase por la cabeza. Cualquiera vale.';
+    $('#t-hint-sub').textContent = t('first_sub');
   } else {
-    $('#t-hint-title').textContent = 'Conecta estas palabras';
+    $('#t-hint-title').textContent = t('connect_title');
     $('#t-hint').innerHTML = last.words.map(wordChip).join('');
-    $('#t-hint-sub').textContent = 'Busca una palabra que tenga que ver con todas. Las palabras que ya han salido no valen.';
+    $('#t-hint-sub').textContent = t('connect_sub');
   }
 
   const mine = R.submitted[me.id];
   input.disabled = !!mine || app.pending;
   button.disabled = !!mine || app.pending;
-  button.textContent = mine ? 'Enviada ✓' : 'Enviar';
+  button.textContent = mine ? t('sent') : t('btn_send');
   button.classList.toggle('done', !!mine);
   if (mine && app.myWord) {
     input.value = app.myWord;
-    setMsg('#word-msg', 'Palabra guardada. Esperando al resto…', true);
+    setText('#word-msg', 'saved', null, true);
   }
 
   $('#t-players').innerHTML = R.players.map((p) => {
     const sent = R.submitted[p.id];
-    const status = !p.online ? 'desconectado' : sent ? 'palabra enviada' : 'pensando…';
-    return `<li class="${sent ? 'sent' : ''} ${p.online ? '' : 'offline'}">${avatar(p)}<span>${esc(p.name)}${p.id === me.id ? ' (tú)' : ''}<small>${status}</small></span></li>`;
+    const status = !p.online ? t('st_off') : sent ? t('st_sent') : t('st_thinking');
+    return `<li class="${sent ? 'sent' : ''} ${p.online ? '' : 'offline'}">${avatar(p)}<span>${esc(p.name)}${p.id === me.id ? esc(t('you_paren')) : ''}<small>${esc(status)}</small></span></li>`;
   }).join('');
 
   const used = [...usedWords(R.history).values()];
   $('#used-box').hidden = used.length === 0;
-  $('#used-n').textContent = used.length;
+  $('#used-title').textContent = t('used_title', { n: used.length });
   $('#used-list').innerHTML = used.map((w) => `<span class="w">${esc(w)}</span>`).join('');
 }
 
@@ -465,19 +547,17 @@ function renderReveal() {
   for (const k of keys) if (k) counts[k] = (counts[k] || 0) + 1;
   const best = Math.max(0, ...Object.values(counts));
 
-  $('#r-tag').textContent = `Ronda ${last.round}`;
+  $('#r-tag').textContent = t('round_tag', { n: last.round });
   if (best >= 2) {
-    $('#r-title').textContent = '¡Casi!';
-    $('#r-text').textContent = `${best} de ${keys.length} habéis coincidido. Ahora buscad una palabra que conecte todas.`;
+    $('#r-title').textContent = t('almost');
+    $('#r-text').textContent = t('almost_text', { best, total: keys.length });
   } else {
-    $('#r-title').textContent = keys.some((k) => !k) ? '¡Se acabó el tiempo!' : '¡No coincidís!';
-    const named = last.words.filter((w) => w.word).map((w) => `«${w.word}»`);
-    $('#r-text').textContent = named.length > 1
-      ? `Siguiente ronda: una palabra que una ${named.slice(0, -1).join(', ')} y ${named[named.length - 1]}.`
-      : 'Siguiente ronda: intentad acercaros con una palabra nueva.';
+    $('#r-title').textContent = keys.some((k) => !k) ? t('timeout') : t('nomatch');
+    const named = last.words.filter((w) => w.word).map((w) => t('quote', { w: w.word }));
+    $('#r-text').textContent = named.length > 1 ? t('next_join', { list: joinList(named) }) : t('next_generic');
   }
 
-  const cardsKey = `${R.game}:${last.round}`;
+  const cardsKey = `${R.game}:${last.round}:${lang}`;
   if ($('#r-cards').dataset.key !== cardsKey) {
     $('#r-cards').dataset.key = cardsKey;
     $('#r-cards').innerHTML = last.words.map((w, i) => {
@@ -485,29 +565,42 @@ function renderReveal() {
       const match = k && counts[k] >= 2;
       return `<article class="rcard ${match ? 'match' : ''}" style="animation-delay:${i * 180}ms">
         <header style="background:${esc(w.color)}">${avatar({ ...w, color: 'transparent' })}${esc(w.name)}</header>
-        <div class="rw ${w.word ? '' : 'none'}">${w.word ? esc(w.word) : 'sin palabra'}</div>
+        <div class="rw ${w.word ? '' : 'none'}">${esc(w.word || t('no_word'))}</div>
       </article>`;
     }).join('');
   }
 
   const online = R.players.filter((p) => p.online);
+  const agreeing = online.filter((p) => R.agree[p.id]);
   const readyCount = online.filter((p) => R.ready[p.id]).length;
-  const imReady = !!R.ready[me.id];
-  const btn = $('#btn-next');
-  btn.disabled = imReady;
-  btn.textContent = imReady ? `Listo ✓ (${readyCount}/${online.length})` : 'Siguiente ronda';
-  btn.classList.toggle('done', imReady);
+  const choice = R.agree[me.id] ? 'agree' : R.ready[me.id] ? 'next' : null;
+
+  const agreeBtn = $('#btn-agree');
+  agreeBtn.hidden = !canAgree(R);
+  agreeBtn.disabled = choice === 'agree';
+  agreeBtn.classList.toggle('done', choice === 'agree');
+  agreeBtn.textContent = choice === 'agree' ? t('agreed', { n: agreeing.length, m: online.length }) : t('btn_agree');
+
+  const nextBtn = $('#btn-next');
+  nextBtn.disabled = choice === 'next';
+  nextBtn.classList.toggle('done', choice === 'next');
+  nextBtn.textContent = choice === 'next' ? t('ready', { n: readyCount, m: online.length }) : t('btn_next');
+
+  $('#r-agree-hint').hidden = !canAgree(R);
+  $('#r-agree-hint').textContent = agreeing.length
+    ? t('agree_votes', { names: joinList(agreeing.map((p) => p.name)), n: agreeing.length, m: online.length })
+    : t('agree_hint');
 }
 
 function renderWon() {
   const R = app.room;
-  $('#w-title').innerHTML = R.round === 1
-    ? '¡A la primera! Misma palabra en la <b>ronda 1</b>'
-    : `Misma palabra en la <b>ronda ${R.round}</b>`;
-  $('#w-word').textContent = R.winWord;
+  $('#w-title').innerHTML = R.synonym
+    ? t('won_syn', { n: R.round })
+    : R.round === 1 ? t('won_first') : t('won_round', { n: R.round });
+  $('#w-word').textContent = R.winWords.join(' ≈ ');
   $('#w-history').innerHTML = R.history.map((h, i) => `
     <li class="${i === R.history.length - 1 ? 'last' : ''}">
-      <span class="rn">Ronda ${h.round}</span>
+      <span class="rn">${esc(t('round_tag', { n: h.round }))}</span>
       <span class="ws">${h.words.map(wordChip).join('')}</span>
     </li>`).join('');
   $('#btn-again').hidden = app.role !== 'host';
@@ -527,17 +620,11 @@ function tick() {
     $('#t-secs').textContent = secs;
     $('#t-bar').style.strokeDashoffset = String(263.9 * (1 - left / total));
     $('#t-timer').classList.toggle('low', secs <= 5);
-    $('#t-timer').setAttribute('aria-label', `Quedan ${secs} segundos`);
+    $('#t-timer').setAttribute('aria-label', t('timer_aria', { s: secs }));
   } else if (R.phase === 'reveal') {
     const secs = Math.max(0, Math.ceil((R.revealEndsAt - hostNow()) / 1000));
-    $('#r-next-info').textContent = `La siguiente ronda empieza sola en ${secs} s.`;
+    $('#r-next-info').textContent = Object.keys(R.agree).length ? t('paused') : t('auto_next', { s: secs });
   }
-}
-
-function setMsg(sel, text, ok = false) {
-  const el = $(sel);
-  el.textContent = text;
-  el.classList.toggle('ok', ok);
 }
 
 function shake(el) {
@@ -564,19 +651,19 @@ function confetti() {
   }
 }
 
-function closeRoom(title, text) {
+function closeRoom() {
   app.closed = true;
-  $('#closed-title').textContent = title;
-  $('#closed-text').textContent = text;
-  $('#conn-label').textContent = 'sin conexión';
+  const label = $('#conn-label');
+  label.dataset.i18n = 'conn_off';
+  label.textContent = t('conn_off');
   $('.live').classList.add('off');
   showView('closed');
 }
 
-function backHome(text) {
+function backHome(key, params) {
   $('#room-pill').hidden = true;
   showView('home');
-  setMsg('#home-msg', text || '');
+  setText('#home-msg', key, params);
 }
 
 /* ---------- Inicio: formulario ---------- */
@@ -596,7 +683,7 @@ function readName() {
   const input = $('#name');
   const name = cleanName(input.value);
   if (!input.value.trim()) {
-    setMsg('#home-msg', 'Escribe tu nombre primero.');
+    setText('#home-msg', 'need_name');
     shake(input);
     input.focus();
     return null;
@@ -611,7 +698,7 @@ function readSettings() {
   if (Number.isNaN(seconds)) {
     seconds = Math.round(Number($('#custom-time').value));
     if (!(seconds >= 10 && seconds <= 300)) {
-      setMsg('#home-msg', 'El tiempo personalizado debe estar entre 10 y 300 segundos.');
+      setText('#home-msg', 'bad_custom');
       shake($('#custom-time'));
       return null;
     }
@@ -621,7 +708,7 @@ function readSettings() {
 
 function peerAvailable() {
   if (typeof Peer === 'function') return true;
-  setMsg('#home-msg', 'No se pudo cargar el módulo de conexión. Comprueba tu conexión a internet y recarga.');
+  setText('#home-msg', 'no_peer');
   return false;
 }
 
@@ -634,12 +721,18 @@ function init() {
   setupSeg('#seg-time', (v) => { $('#custom-wrap').hidden = v !== 'custom'; });
   setupSeg('#seg-players');
 
+  $('#btn-lang').addEventListener('click', () => {
+    lang = lang === 'es' ? 'zh' : 'es';
+    save('local', 'mp-lang', lang);
+    applyLang();
+  });
+
   $('#btn-create').addEventListener('click', () => {
     if (!readName() || !peerAvailable()) return;
     const settings = readSettings();
     if (!settings) return;
-    setMsg('#home-msg', '');
-    showView('connecting', 'Creando sala…');
+    setText('#home-msg', null);
+    showView('connecting', 'creating');
     startHosting(settings);
   });
 
@@ -649,7 +742,7 @@ function init() {
     const code = normalizeCode($('#join-code').value);
     if (!readName()) return;
     if (code.length !== 6) {
-      setMsg('#home-msg', 'El código tiene 6 caracteres.');
+      setText('#home-msg', 'bad_code');
       shake($('#join-code'));
       return;
     }
@@ -679,11 +772,11 @@ function init() {
     const btn = $('#btn-copy');
     try {
       await navigator.clipboard.writeText(link);
-      btn.textContent = '¡Enlace copiado!';
+      btn.textContent = t('copied');
     } catch {
-      window.prompt('Copia este enlace y pásaselo a tus amigos:', link);
+      window.prompt(t('copy_prompt'), link);
     }
-    setTimeout(() => { btn.textContent = 'Copiar enlace de invitación'; }, 2000);
+    setTimeout(() => { btn.textContent = t('btn_copy'); }, 2000);
   });
 
   $('#btn-start-now').addEventListener('click', () => send({ t: 'start' }));
@@ -695,20 +788,22 @@ function init() {
     const word = cleanWord($('#word').value);
     const err = wordError(word, R.history);
     if (err) {
-      setMsg('#word-msg', err);
+      setText('#word-msg', err.key, err.params);
       shake($('#word'));
       return;
     }
     app.pending = true;
     $('#word').disabled = true;
     $('#btn-word').disabled = true;
-    setMsg('#word-msg', '');
+    setText('#word-msg', null);
     send({ t: 'word', word });
   });
 
   $('#btn-next').addEventListener('click', () => send({ t: 'next' }));
+  $('#btn-agree').addEventListener('click', () => send({ t: 'agree' }));
   $('#btn-again').addEventListener('click', () => send({ t: 'again' }));
 
+  applyLang();
   setInterval(tick, 200);
 }
 
