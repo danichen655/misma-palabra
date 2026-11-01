@@ -25,7 +25,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  font-family: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Bricolage Grotesque', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--ink);
   background-color: var(--paper);
   background-image: radial-gradient(rgba(29, 26, 22, .13) 1px, transparent 1.4px);
@@ -59,6 +59,15 @@ p { margin: 0; }
 .logo-text { display: flex; flex-direction: column; line-height: 1; }
 .logo-text b { font-size: 1.15rem; font-weight: 800; letter-spacing: -.02em; }
 .logo-text small { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; margin-top: 3px; }
+
+.top-right { display: flex; align-items: center; gap: 10px; }
+.lang {
+  font: inherit; font-weight: 800; font-size: .9rem; color: var(--ink); cursor: pointer;
+  background: var(--mustard); border: var(--line); border-radius: 999px; box-shadow: 3px 3px 0 var(--ink);
+  padding: 6px 14px; transition: transform .08s, box-shadow .08s; white-space: nowrap; flex: none;
+}
+.lang:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+.lang:active { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--ink); }
 
 .pill {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
@@ -107,6 +116,7 @@ main { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 8px 16p
 .btn:disabled { cursor: default; opacity: .65; transform: none; box-shadow: 2px 2px 0 var(--ink); }
 .btn.primary { background: var(--tomato); }
 .btn.dark { background: var(--ink); color: var(--paper-2); }
+.btn.yellow { background: var(--mustard); }
 .btn.big { width: 100%; font-size: 1.12rem; padding: .9em 1.25em; }
 .btn.done { background: var(--mint); }
 
@@ -176,6 +186,7 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
 .or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; color: var(--muted); font-size: .85rem; font-weight: 600; }
 .or::before, .or::after { content: ""; flex: 1; border-top: 2px dashed rgba(29, 26, 22, .35); }
 .join { display: flex; gap: 10px; }
+.join .btn { flex: none; white-space: nowrap; }
 .join input { font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .2em; font-size: 1.1rem; }
 
 .how { margin-top: 72px; }
@@ -294,7 +305,14 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
 @keyframes flip { from { transform: rotateY(90deg) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
 
 .next { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.next .btn.big { max-width: 360px; }
+.next-btns { display: flex; gap: 14px; width: 100%; max-width: 560px; }
+.next-btns .btn.big { flex: 1; }
+.next .sub { text-align: center; max-width: 34em; }
+.sub.small { font-size: .88rem; color: var(--muted); }
+
+/* En chino el interletraje negativo junta demasiado los caracteres */
+:lang(zh) h1, :lang(zh) h2, :lang(zh) h3, :lang(zh) .big-word, :lang(zh) .round-badge { letter-spacing: 0; }
+:lang(zh) .hero h1 { line-height: 1.15; }
 
 /* Victoria */
 .win { gap: 18px; }
@@ -333,7 +351,8 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
   .card { padding: 20px; box-shadow: 6px 6px 0 var(--ink); }
   .logo-text small { display: none; }
   .pill { font-size: .78rem; padding: 5px 10px; }
-  .answer-row { flex-direction: column; }
+  .answer-row, .next-btns { flex-direction: column; }
+  .lang { padding: 5px 11px; font-size: .82rem; }
   .timer { width: 78px; height: 78px; }
   .timer::after { inset: 14px; }
   .timer span { font-size: 1.3rem; }
