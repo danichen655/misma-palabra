@@ -1,9 +1,10 @@
 <!doctype html>
 <!--
-  Fuente de compartir-es.png y compartir-zh.png (vista previa al pegar el enlace en redes y chats).
-  Para regenerarlas (español y chino):
+  Fuente de compartir-es.png, compartir-zh.png y compartir-en.png (vista previa al pegar el enlace en redes y chats).
+  Para regenerarlas (español, chino e inglés):
   chrome --headless --hide-scrollbars --window-size=1200,630 --virtual-time-budget=8000 --screenshot=compartir-es.png file:///…/recursos/imagen-compartir.html
   chrome --headless --hide-scrollbars --window-size=1200,630 --virtual-time-budget=8000 --screenshot=compartir-zh.png "file:///…/recursos/imagen-compartir.html#zh"
+  chrome --headless --hide-scrollbars --window-size=1200,630 --virtual-time-budget=8000 --screenshot=compartir-en.png "file:///…/recursos/imagen-compartir.html#en"
 -->
 <html lang="es">
 <head>
@@ -82,6 +83,18 @@
       set('w2', '雪');
       set('w3', '冬天');
       set('cta', '免费开玩！');
+    }
+    // imagen-compartir.html#en genera la versión inglesa (compartir-en.png).
+    if (location.hash === '#en') {
+      document.documentElement.lang = 'en';
+      const set = (id, html) => { document.getElementById(id).innerHTML = html; };
+      set('brand', 'Same Word');
+      set('title', 'In which round will you think of the <em>same</em> word?');
+      set('sub', 'Online word association game · free · invite with a link');
+      set('w1', 'beach');
+      set('w2', 'snow');
+      set('w3', 'winter');
+      set('cta', 'Play free!');
     }
   </script>
 </body>

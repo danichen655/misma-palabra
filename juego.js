@@ -6,7 +6,7 @@
  * app en el móvil, recargar), la web vuelve a conectarse sola a la misma sala.
  */
 
-import { TEXTS } from './textos.js';
+import { LANGS, TEXTS } from './textos.js';
 import { canAgree, cleanName, cleanWord, isCode, norm, randomCode, usedWords, wordError } from './reglas.js';
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
@@ -40,24 +40,30 @@ function savedRoom() {
 
 /* ---------- Idioma ---------- */
 
+// Código de idioma para el navegador (atributo lang, listas, números).
+const LOCALES = { en: 'en', es: 'es-ES', zh: 'zh-CN' };
+
 let lang = (() => {
-  // Un enlace compartido desde la versión china lleva ?lang=zh.
+  // Los enlaces compartidos desde /es/ y /zh/ llevan ?lang=es o ?lang=zh.
   const fromUrl = new URLSearchParams(location.search).get('lang');
-  if (fromUrl === 'es' || fromUrl === 'zh') return fromUrl;
+  if (LANGS.includes(fromUrl)) return fromUrl;
   const saved = load('mp-lang');
-  if (saved === 'es' || saved === 'zh') return saved;
-  return /^zh\b/i.test(navigator.language || '') ? 'zh' : 'es';
+  if (LANGS.includes(saved)) return saved;
+  const browser = (navigator.language || '').toLowerCase();
+  if (browser.startsWith('zh')) return 'zh';
+  if (browser.startsWith('es')) return 'es';
+  return 'en';
 })();
 
 function t(key, params = {}) {
-  const value = TEXTS[lang][key] ?? TEXTS.es[key] ?? key;
+  const value = TEXTS[lang][key] ?? TEXTS.en[key] ?? key;
   if (typeof value === 'function') return value(params);
   return value.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? ''));
 }
 
 function joinList(items) {
   try {
-    return new Intl.ListFormat(lang === 'zh' ? 'zh' : 'es', { type: 'conjunction' }).format(items);
+    return new Intl.ListFormat(LOCALES[lang], { type: 'conjunction' }).format(items);
   } catch {
     return items.join(', ');
   }
@@ -79,7 +85,8 @@ function paintText(sel) {
 }
 
 function applyLang() {
-  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'es';
+  document.documentElement.lang = LOCALES[lang];
+  $('#lang-select').value = lang;
   document.title = t('doc_title');
   $('meta[name="description"]').content = t('doc_desc');
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
@@ -106,7 +113,7 @@ function renderGlobalStats() {
   const stats = app.globalStats;
   $('#global-stats').hidden = !stats;
   if (!stats) return;
-  const fmt = new Intl.NumberFormat(lang === 'zh' ? 'zh-CN' : 'es-ES');
+  const fmt = new Intl.NumberFormat(LOCALES[lang]);
   $('#gs-played').textContent = fmt.format(stats.played);
   $('#gs-matched').textContent = fmt.format(stats.matched);
 }
@@ -269,10 +276,10 @@ function setOnline(on) {
   $('.live').classList.toggle('off', !on);
 }
 
-// Quien juega en chino comparte la entrada /zh/, así la vista previa del enlace sale en chino.
+// Cada idioma comparte su propia entrada (/, /es/, /zh/) para que la vista previa del enlace salga en ese idioma.
 function shareBase() {
   const base = location.origin + location.pathname.replace(/[^/]*$/, '');
-  return lang === 'zh' ? `${base}zh/` : base;
+  return lang === 'en' ? base : `${base}${lang}/`;
 }
 
 function inviteLink(code) {
@@ -590,8 +597,9 @@ function init() {
   setupSeg('#seg-time', (v) => { $('#custom-wrap').hidden = v !== 'custom'; });
   setupSeg('#seg-players');
 
-  $('#btn-lang').addEventListener('click', () => {
-    lang = lang === 'es' ? 'zh' : 'es';
+  $('#lang-select').addEventListener('change', (e) => {
+    if (!LANGS.includes(e.target.value)) return;
+    lang = e.target.value;
     save('mp-lang', lang);
     const params = new URLSearchParams(location.search);
     if (params.has('lang')) {

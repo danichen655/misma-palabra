@@ -5,7 +5,9 @@
   "scripts": {
     "web": "node servidor.cjs",
     "servidor": "wrangler dev -c backend/wrangler.jsonc --port 8787",
-    "desplegar": "wrangler deploy -c backend/wrangler.jsonc"
+    "desplegar": "wrangler deploy -c backend/wrangler.jsonc",
+    "construir": "node scripts/construir.mjs",
+    "publicar-web": "node scripts/construir.mjs && wrangler pages deploy dist --project-name playsameword --branch main --commit-dirty=true"
   },
   "devDependencies": {
     "wrangler": "^4.156.2"

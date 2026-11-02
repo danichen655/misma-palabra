@@ -9,9 +9,9 @@ export const REVEAL_MS = 15000;
 export const MAX_WORD = 24;
 export const MAX_NAME = 16;
 
-const ARTICLES = /^(el|la|los|las|lo|un|una|unos|unas)\s+/;
+const ARTICLES = /^(el|la|los|las|lo|un|una|unos|unas|the|a|an)\s+/;
 
-// Clave de comparación: sin mayúsculas, tildes, signos ni artículo inicial (la ñ se respeta).
+// Clave de comparación: sin mayúsculas, tildes, signos ni artículo inicial en español o inglés (la ñ se respeta).
 export function norm(word) {
   return String(word)
     .normalize('NFKC')
