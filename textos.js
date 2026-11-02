@@ -22,6 +22,10 @@ export const TEXTS = {
     chip_time: '30 / 60 s o a tu medida',
     chip_link: 'Invita con un enlace',
     chip_win: 'Misma palabra (o sinónimo) = victoria',
+    stats_title: 'Entre todos los jugadores',
+    stats_played: 'partidas jugadas',
+    stats_matched: 'coincidencias',
+    room_score: (p) => `En esta sala: ${p.played} ${p.played === 1 ? 'partida' : 'partidas'} · ${p.matched} ${p.matched === 1 ? 'coincidencia' : 'coincidencias'}`,
 
     invite_sticker: 'Te han invitado',
     invite_sub: 'Escribe tu nombre y entra. La primera ronda empieza en cuanto estéis todos.',
@@ -155,6 +159,10 @@ export const TEXTS = {
     chip_time: '30 / 60 秒或自定义',
     chip_link: '链接邀请好友',
     chip_win: '同词（或同义词）即通关',
+    stats_title: '所有玩家累计',
+    stats_played: '局已开玩',
+    stats_matched: '局想到一块儿',
+    room_score: '本房间：已玩 {played} 局 · 想到一块儿 {matched} 局',
 
     invite_sticker: '好友邀请你',
     invite_sub: '写下你的昵称就能进入。人齐后第一轮自动开始。',

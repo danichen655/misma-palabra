@@ -11,6 +11,8 @@ import { canAgree, cleanName, cleanWord, isCode, norm, randomCode, usedWords, wo
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
 const SERVER = LOCAL ? `ws://${location.hostname}:8787` : 'wss://misma-palabra.misma-palabra.workers.dev';
+const STATS_URL = `${SERVER.replace(/^ws/, 'http')}/estadisticas`;
+const STATS_REFRESH_MS = 60000;
 const PING_MS = 25000;
 const STALE_MS = 60000;
 const SHARE_ROUNDS = 8;
@@ -85,7 +87,28 @@ function applyLang() {
   for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t(el.dataset.i18nPh);
   for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
   for (const sel of dynamic.keys()) paintText(sel);
+  renderGlobalStats();
   render();
+}
+
+/* ---------- Contador global (portada) ---------- */
+
+async function loadGlobalStats() {
+  try {
+    const res = await fetch(STATS_URL);
+    if (!res.ok) return;
+    app.globalStats = await res.json();
+    renderGlobalStats();
+  } catch { /* sin contador: la portada funciona igual */ }
+}
+
+function renderGlobalStats() {
+  const stats = app.globalStats;
+  $('#global-stats').hidden = !stats?.played;
+  if (!stats?.played) return;
+  const fmt = new Intl.NumberFormat(lang === 'zh' ? 'zh-CN' : 'es-ES');
+  $('#gs-played').textContent = fmt.format(stats.played);
+  $('#gs-matched').textContent = fmt.format(stats.matched);
 }
 
 /* ---------- Conexión con el servidor de salas ---------- */
@@ -196,7 +219,7 @@ function leave(key, params) {
 /* ---------- Estado local e interfaz ---------- */
 
 const app = {
-  room: null, offset: 0, roundKey: null, myWord: null, pending: false, closed: false, celebrated: null,
+  room: null, globalStats: null, offset: 0, roundKey: null, myWord: null, pending: false, closed: false, celebrated: null,
 };
 
 const VIEWS = ['home', 'connecting', 'lobby', 'think', 'reveal', 'won', 'closed'];
@@ -291,6 +314,9 @@ function renderLobby() {
   }).join('');
   for (let i = 0; i < missing; i++) html += `<li class="empty"><span class="avatar">?</span>${esc(t('waiting_slot'))}</li>`;
   $('#lobby-players').innerHTML = html;
+
+  $('#lobby-score').hidden = !R.stats?.played;
+  if (R.stats?.played) $('#lobby-score').textContent = t('room_score', R.stats);
 
   const canStart = isHost() && online >= 2 && online < R.settings.max;
   $('#btn-start-now').hidden = !canStart;
@@ -416,6 +442,8 @@ function renderWon() {
       <span class="rn">${esc(t('round_tag', { n: h.round }))}</span>
       <span class="ws">${h.words.map(wordChip).join('')}</span>
     </li>`).join('');
+  $('#w-score').hidden = !R.stats;
+  if (R.stats) $('#w-score').textContent = t('room_score', R.stats);
   $('#btn-again').hidden = !isHost();
   $('#w-wait').hidden = isHost();
 
@@ -668,6 +696,8 @@ function init() {
 
   applyLang();
   setInterval(tick, 200);
+  loadGlobalStats();
+  setInterval(() => { if (!$('#v-home').hidden && document.visibilityState === 'visible') loadGlobalStats(); }, STATS_REFRESH_MS);
 }
 
 init();

@@ -189,6 +189,22 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
 .join .btn { flex: none; white-space: nowrap; }
 .join input { font-family: 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .2em; font-size: 1.1rem; }
 
+.global-stats {
+  display: inline-flex; flex-direction: column; gap: 8px; margin-top: 26px;
+  background: var(--white); border: var(--line); border-radius: 18px; box-shadow: var(--shadow-sm);
+  padding: 12px 20px 14px; transform: rotate(-1deg);
+}
+.gs-title { font-size: .76rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.gs-row { display: flex; gap: 26px; flex-wrap: wrap; }
+.gs-item { display: flex; align-items: baseline; gap: 8px; font-weight: 600; color: var(--ink-2); }
+.gs-item b { font-size: 2rem; font-weight: 800; color: var(--ink); letter-spacing: -.03em; line-height: 1; }
+.gs-item.match b { background: var(--mustard); border: 2.5px solid var(--ink); border-radius: 10px; padding: 0 .2em; }
+
+.score {
+  font-weight: 700; font-size: .95rem; background: var(--paper); border: 2.5px dashed var(--ink);
+  border-radius: 999px; padding: .4em 1em;
+}
+
 .how { margin-top: 72px; }
 .how h2 { font-size: clamp(1.8rem, 4vw, 2.4rem); }
 .steps { list-style: none; padding: 0; margin: 24px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }

@@ -23,10 +23,29 @@ export default {
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('Se esperaba un WebSocket', { status: 426 });
       return env.SALAS.get(env.SALAS.idFromName(match[1])).fetch(request);
     }
+    if (url.pathname === '/estadisticas') {
+      const stats = await contador(env).leer();
+      return Response.json(stats, { headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=30' } });
+    }
     if (url.pathname === '/') return new Response('Misma Palabra · servidor de salas\n', { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
     return new Response('No encontrado\n', { status: 404 });
   },
 };
+
+const contador = (env) => env.CONTADOR.get(env.CONTADOR.idFromName('global'));
+
+// Totales de todas las salas: partidas empezadas y partidas que acabaron en coincidencia.
+export class Contador extends DurableObject {
+  async sumar(campo) {
+    if (campo !== 'played' && campo !== 'matched') return;
+    await this.ctx.storage.put(campo, ((await this.ctx.storage.get(campo)) ?? 0) + 1);
+  }
+
+  async leer() {
+    const values = await this.ctx.storage.get(['played', 'matched']);
+    return { played: values.get('played') ?? 0, matched: values.get('matched') ?? 0 };
+  }
+}
 
 export class Sala extends DurableObject {
   constructor(ctx, env) {
@@ -37,6 +56,7 @@ export class Sala extends DurableObject {
       this.room = (await ctx.storage.get('room')) ?? null;
       this.words = (await ctx.storage.get('words')) ?? {};
     });
+    this.pendingStats = [];   // sumas para el contador global, se envían en commit()
   }
 
   /* ---------- Conexiones ---------- */
@@ -63,7 +83,7 @@ export class Sala extends DurableObject {
       this.room = {
         code, settings: { seconds, max }, game: 0, players: [], hostId: null, phase: 'lobby', round: 0,
         endsAt: 0, revealEndsAt: 0, submitted: {}, ready: {}, agree: {},
-        history: [], winWords: [], synonym: false, emptySince: 0,
+        history: [], winWords: [], synonym: false, emptySince: 0, stats: { played: 0, matched: 0 },
       };
       this.words = {};
     } else if (!this.room) {
@@ -168,8 +188,16 @@ export class Sala extends DurableObject {
     }
   }
 
+  // Suma al marcador de la sala y deja apuntada la misma suma para el contador global.
+  count(field) {
+    this.room.stats ??= { played: 0, matched: 0 };
+    this.room.stats[field] += 1;
+    this.pendingStats.push(field);
+  }
+
   startGame() {
     const R = this.room;
+    this.count('played');
     R.game += 1;
     R.round = 0;
     R.history = [];
@@ -197,6 +225,7 @@ export class Sala extends DurableObject {
     if (keys.length > 1 && keys.every((k) => k && k === keys[0])) {
       R.phase = 'won';
       R.winWords = [words[0].word];
+      this.count('matched');
     } else {
       R.phase = 'reveal';
       R.ready = {};
@@ -212,6 +241,7 @@ export class Sala extends DurableObject {
     R.phase = 'won';
     R.synonym = true;
     R.winWords = [...unique.values()];
+    this.count('matched');
   }
 
   async alarm() {
@@ -246,6 +276,7 @@ export class Sala extends DurableObject {
   // Recalcula quién está conectado, avanza si toca, guarda, programa la alarma y avisa a todos.
   async commit() {
     const R = this.room;
+    R.stats ??= { played: 0, matched: 0 };   // salas creadas antes de existir el marcador
     const open = this.openSockets();
     const onlineIds = new Set(open.map((ws) => ws.deserializeAttachment().pid));
     for (const p of R.players) p.online = onlineIds.has(p.id);
@@ -262,6 +293,11 @@ export class Sala extends DurableObject {
       const pid = ws.deserializeAttachment().pid;
       const mine = R.phase === 'thinking' ? this.words[pid] ?? null : null;
       try { ws.send(JSON.stringify({ t: 'state', room: R, now, mine })); } catch { /* se está cerrando */ }
+    }
+
+    // El contador global es secundario: si falla, la partida sigue igual.
+    for (const field of this.pendingStats.splice(0)) {
+      try { await contador(this.env).sumar(field); } catch (err) { console.error('contador', err); }
     }
   }
 

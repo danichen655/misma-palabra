@@ -5,8 +5,14 @@
   "main": "sala.js",
   "compatibility_date": "2025-09-01",
   "durable_objects": {
-    "bindings": [{ "name": "SALAS", "class_name": "Sala" }]
+    "bindings": [
+      { "name": "SALAS", "class_name": "Sala" },
+      { "name": "CONTADOR", "class_name": "Contador" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Sala"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Sala"] },
+    { "tag": "v2", "new_sqlite_classes": ["Contador"] }
+  ],
   "observability": { "enabled": true }
 }

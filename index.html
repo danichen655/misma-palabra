@@ -60,6 +60,13 @@
             <li><span class="ico ico-link" aria-hidden="true"></span><span data-i18n="chip_link">Invita con un enlace</span></li>
             <li><span class="ico ico-target" aria-hidden="true"></span><span data-i18n="chip_win">Misma palabra (o sinónimo) = victoria</span></li>
           </ul>
+          <div class="global-stats" id="global-stats" hidden>
+            <span class="gs-title" data-i18n="stats_title">Entre todos los jugadores</span>
+            <div class="gs-row">
+              <div class="gs-item"><b id="gs-played">0</b><span data-i18n="stats_played">partidas jugadas</span></div>
+              <div class="gs-item match"><b id="gs-matched">0</b><span data-i18n="stats_matched">coincidencias</span></div>
+            </div>
+          </div>
         </div>
 
         <div class="card start" id="start-card">
@@ -154,6 +161,7 @@
         <div class="code" id="lobby-code" data-i18n-aria="code_aria" aria-label="Código de sala"></div>
         <button class="btn primary" id="btn-copy" type="button" data-i18n="btn_copy">Copiar enlace de invitación</button>
         <ul class="players" id="lobby-players"></ul>
+        <p class="score" id="lobby-score" hidden></p>
         <button class="btn dark" id="btn-start-now" type="button" hidden></button>
       </div>
     </section>
@@ -219,6 +227,7 @@
         <h2 id="w-title"></h2>
         <div class="big-word" id="w-word"></div>
         <ol class="timeline" id="w-history"></ol>
+        <p class="score" id="w-score"></p>
         <div class="win-actions">
           <button class="btn yellow big" id="btn-share" type="button" data-i18n="btn_share">Compartir resultado</button>
           <button class="btn primary big" id="btn-again" type="button" data-i18n="btn_again">Jugar otra vez</button>
