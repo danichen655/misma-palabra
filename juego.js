@@ -287,7 +287,15 @@ function startJoin(code) {
 function leave(key, params) {
   clearTimeout(conn.timer);
   Object.assign(conn, { code: null, create: null, joined: false });
-  if (key === 'no_room' && savedRoom()?.code === params?.code) save('mp-sala', 'null');
+  // Una sala que ya no existe no debe abrirse sola ni ofrecerse al recargar.
+  if (key === 'no_room' || key === 'room_expired') {
+    if (savedRoom()?.code === params?.code) save('mp-sala', 'null');
+    const url = new URLSearchParams(location.search);
+    url.delete('sala');
+    history.replaceState(null, '', location.pathname + (url.size ? `?${url}` : ''));
+    $('#start-card').classList.remove('inviting');
+    $('#invite').hidden = true;
+  }
   app.room = null;
   backHome(key, params);
 }
@@ -592,8 +600,19 @@ function tick() {
     $('#t-timer').setAttribute('aria-label', t('timer_aria', { s: secs }));
   } else if (R.phase === 'reveal') {
     const secs = Math.max(0, Math.ceil((R.revealEndsAt - hostNow()) / 1000));
-    $('#r-next-info').textContent = Object.keys(R.agree).length ? t('paused') : t('auto_next', { s: secs });
+    $('#r-next-info').textContent = R.paused
+      ? t('paused_empty', { time: countdown(R.closeAt) })
+      : Object.keys(R.agree).length ? t('paused') : t('auto_next', { s: secs });
+  } else if (R.phase === 'lobby') {
+    $('#lobby-expire').hidden = !R.closeAt;
+    if (R.closeAt) $('#lobby-expire').textContent = t('lobby_expire', { time: countdown(R.closeAt) });
   }
+}
+
+// Tiempo que falta hasta `at` (hora del servidor) como m:ss.
+function countdown(at) {
+  const secs = Math.max(0, Math.ceil((at - hostNow()) / 1000));
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
 function shake(el) {

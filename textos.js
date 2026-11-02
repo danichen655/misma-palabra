@@ -79,6 +79,9 @@ export const TEXTS = {
     host_tag: 'anfitrión',
     waiting_slot: 'Esperando…',
     start_now: 'Empezar ya con {n}',
+    lobby_expire: 'Si no entra nadie más, la sala se cerrará en {time}.',
+    room_expired: 'La sala se cerró porque estuvo 5 minutos sin actividad. Crea otra cuando quieras.',
+    paused_empty: 'Nadie escribió nada, así que la partida está en pausa. Pulsad «Siguiente ronda» para seguir (se cerrará en {time}).',
 
     round_badge: 'Ronda <b>{n}</b>',
     timer_aria: 'Quedan {s} segundos',
@@ -216,6 +219,9 @@ export const TEXTS = {
     host_tag: '房主',
     waiting_slot: '等待中…',
     start_now: '{n} 人直接开始',
+    lobby_expire: '如果没有人再加入，房间将在 {time} 后关闭。',
+    room_expired: '房间已关闭：5 分钟内没有任何动静。随时可以再开一个。',
+    paused_empty: '没有人写词，游戏已暂停。点「下一轮」继续（{time} 后关闭）。',
 
     round_badge: '第 <b>{n}</b> 轮',
     timer_aria: '还剩 {s} 秒',
@@ -353,6 +359,9 @@ export const TEXTS = {
     host_tag: 'host',
     waiting_slot: 'Waiting…',
     start_now: 'Start now with {n}',
+    lobby_expire: 'If nobody else joins, the room will close in {time}.',
+    room_expired: 'The room closed after 5 minutes without activity. Create a new one whenever you like.',
+    paused_empty: 'Nobody wrote anything, so the game is paused. Tap “Next round” to continue (it will close in {time}).',
 
     round_badge: 'Round <b>{n}</b>',
     timer_aria: '{s} seconds left',

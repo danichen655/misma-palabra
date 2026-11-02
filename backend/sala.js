@@ -13,6 +13,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { COLORS, REVEAL_MS, canAgree, cleanName, cleanWord, isCode, norm, wordError } from '../reglas.js';
 
 const EMPTY_TTL_MS = 2 * 60 * 60 * 1000;   // una sala vacía se borra a las 2 h
+const IDLE_MS = 5 * 60 * 1000;             // sala de espera sin nadie nuevo, o partida en pausa: se cierra a los 5 min
 const MAX_MESSAGE = 2000;
 
 export default {
@@ -57,6 +58,12 @@ export class Sala extends DurableObject {
       this.words = (await ctx.storage.get('words')) ?? {};
     });
     this.pendingStats = [];   // sumas para el contador global, se envían en commit()
+    this.alarmAt = undefined; // hora de la alarma programada (desconocida tras despertar)
+  }
+
+  // En local se puede acortar para probar: wrangler dev --var IDLE_MS:10000
+  idleMs() {
+    return Number(this.env.IDLE_MS) || IDLE_MS;
   }
 
   /* ---------- Conexiones ---------- */
@@ -84,6 +91,7 @@ export class Sala extends DurableObject {
         code, settings: { seconds, max }, game: 0, players: [], hostId: null, phase: 'lobby', round: 0,
         endsAt: 0, revealEndsAt: 0, submitted: {}, ready: {}, agree: {},
         history: [], winWords: [], synonym: false, emptySince: 0, stats: { played: 0, matched: 0 },
+        paused: false, closeAt: Date.now() + this.idleMs(),
       };
       this.words = {};
     } else if (!this.room) {
@@ -100,6 +108,7 @@ export class Sala extends DurableObject {
       const taken = new Set(R.players.map((p) => p.color));
       player = { id: pid, name, color: COLORS.find((c) => !taken.has(c)) ?? COLORS[0], online: true };
       R.players.push(player);
+      R.closeAt = Date.now() + this.idleMs();   // alguien nuevo: la sala de espera vuelve a tener 5 min
     }
     player.name = name;
 
@@ -127,6 +136,7 @@ export class Sala extends DurableObject {
 
   async webSocketClose(ws, code) {
     try { ws.close(code >= 3000 ? code : 1000, 'adiós'); } catch { /* ya cerrado */ }
+    // Tras expire() la sala ya no existe: no hay nada que guardar.
     if (this.room) await this.commit();
   }
 
@@ -169,7 +179,7 @@ export class Sala extends DurableObject {
         if (pid !== R.hostId || R.phase !== 'won') return false;
         R.players = R.players.filter((p) => this.isOnline(p.id));
         if (R.players.length >= R.settings.max) this.startGame();
-        else R.phase = 'lobby';
+        else { R.phase = 'lobby'; R.closeAt = Date.now() + this.idleMs(); }
         return true;
       default:
         return false;
@@ -213,6 +223,8 @@ export class Sala extends DurableObject {
     R.submitted = {};
     R.ready = {};
     R.agree = {};
+    R.paused = false;
+    R.closeAt = 0;
     this.words = {};
     R.endsAt = Date.now() + R.settings.seconds * 1000;
   }
@@ -231,6 +243,10 @@ export class Sala extends DurableObject {
       R.ready = {};
       R.agree = {};
       R.revealEndsAt = Date.now() + REVEAL_MS;
+      // Si nadie escribió nada, la partida está abandonada: no se avanza sola (evita
+      // rondas infinitas con una pestaña olvidada) y se cierra si nadie sigue en 5 min.
+      R.paused = keys.every((k) => !k);
+      R.closeAt = R.paused ? Date.now() + this.idleMs() : 0;
     }
   }
 
@@ -245,22 +261,35 @@ export class Sala extends DurableObject {
   }
 
   async alarm() {
+    this.alarmAt = null;   // la alarma que acaba de sonar ya no está programada
     if (!this.room) return;
     const R = this.room;
     const now = Date.now();
-    if (!this.openSockets().length) {
-      if (R.emptySince && now >= R.emptySince + EMPTY_TTL_MS) {
-        await this.ctx.storage.deleteAll();
-        this.room = null;
-        this.words = {};
-        return;
-      }
+    const empty = !this.openSockets().length;
+    if ((R.closeAt && now >= R.closeAt) || (empty && R.emptySince && now >= R.emptySince + EMPTY_TTL_MS)) {
+      await this.expire();
+      return;
+    }
+    if (empty) {
+      // Sin nadie conectado la partida queda congelada hasta que alguien vuelva.
     } else if (R.phase === 'thinking' && now >= R.endsAt) {
       this.reveal();
-    } else if (R.phase === 'reveal' && !Object.keys(R.agree).length && now >= R.revealEndsAt) {
+    } else if (R.phase === 'reveal' && !R.paused && !Object.keys(R.agree).length && now >= R.revealEndsAt) {
       this.nextRound();
     }
     await this.commit();
+  }
+
+  // Cierra la sala por inactividad: avisa a quien siga conectado y borra todo.
+  async expire() {
+    this.room = null;
+    this.words = {};
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.close(4001, 'room_expired'); } catch { /* ya cerrado */ }
+    }
+    this.alarmAt = null;
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
   }
 
   /* ---------- Estado ---------- */
@@ -301,12 +330,17 @@ export class Sala extends DurableObject {
     }
   }
 
+  // Programa la alarma para lo primero que tenga que pasar; solo escribe si la hora cambia.
   async scheduleAlarm() {
     const R = this.room;
-    let at = null;
-    if (R.emptySince) at = R.emptySince + EMPTY_TTL_MS;
-    else if (R.phase === 'thinking') at = R.endsAt;
-    else if (R.phase === 'reveal' && !Object.keys(R.agree).length) at = R.revealEndsAt;
+    const times = [];
+    if (R.closeAt) times.push(R.closeAt);
+    if (R.emptySince) times.push(R.emptySince + EMPTY_TTL_MS);
+    else if (R.phase === 'thinking') times.push(R.endsAt);
+    else if (R.phase === 'reveal' && !R.paused && !Object.keys(R.agree).length) times.push(R.revealEndsAt);
+    const at = times.length ? Math.min(...times) : null;
+    if (at === this.alarmAt) return;
+    this.alarmAt = at;
     if (at) await this.ctx.storage.setAlarm(at);
     else await this.ctx.storage.deleteAlarm();
   }
