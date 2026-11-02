@@ -61,23 +61,46 @@ p { margin: 0; }
 .logo-text small { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; margin-top: 3px; }
 
 .top-right { display: flex; align-items: center; gap: 10px; }
-.lang { position: relative; flex: none; }
-.lang select {
-  appearance: none; font: inherit; font-weight: 800; font-size: .9rem; color: var(--ink); cursor: pointer;
+/* Selector de idioma */
+.lang { position: relative; flex: none; z-index: 30; }
+.lang-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: inherit; font-weight: 800; font-size: .9rem; color: var(--ink); cursor: pointer; white-space: nowrap;
   background: var(--mustard); border: var(--line); border-radius: 999px; box-shadow: 3px 3px 0 var(--ink);
-  padding: 6px 30px 6px 14px; transition: transform .08s, box-shadow .08s;
+  padding: 6px 12px 6px 9px; transition: transform .08s, box-shadow .08s;
 }
-.lang::after {
-  content: ""; position: absolute; right: 13px; top: 50%; width: 7px; height: 7px; pointer-events: none;
-  border-right: 2.5px solid var(--ink); border-bottom: 2.5px solid var(--ink); transform: translateY(-70%) rotate(45deg);
+.lang-btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+.lang-btn[aria-expanded="true"] { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--ink); }
+.globe { width: 19px; height: 19px; fill: var(--white); stroke: var(--ink); stroke-width: 2; flex: none; }
+.lang-code { display: none; }
+.chev {
+  width: 7px; height: 7px; margin: 0 2px 3px 2px; border-right: 2.5px solid var(--ink); border-bottom: 2.5px solid var(--ink);
+  transform: rotate(45deg); transition: transform .15s;
 }
-.lang select:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
-.lang select:focus-visible { outline: 3px solid var(--cobalt); outline-offset: 3px; }
+.lang-btn[aria-expanded="true"] .chev { transform: translateY(3px) rotate(225deg); }
 
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
-  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+.lang-menu {
+  position: absolute; right: 0; top: calc(100% + 12px); width: 230px; margin: 0; padding: 8px; list-style: none;
+  background: var(--paper-2); border: var(--line); border-radius: 18px; box-shadow: var(--shadow);
+  transform-origin: top right; animation: menu-in .14s ease-out;
 }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+.lang-menu button {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  font: inherit; color: var(--ink); background: none; border: 2.5px solid transparent; border-radius: 12px;
+  padding: 8px 10px; cursor: pointer;
+}
+.lang-menu button:hover, .lang-menu button:focus-visible { background: var(--white); border-color: var(--ink); outline: none; }
+.lang-menu button[aria-checked="true"] { background: var(--mustard); border-color: var(--ink); }
+.lm-code {
+  display: grid; place-items: center; width: 34px; height: 34px; flex: none; border: 2.5px solid var(--ink); border-radius: 10px;
+  background: var(--white); font-family: 'DM Mono', 'Noto Sans SC', monospace; font-size: .85rem; font-weight: 700;
+}
+.lm-text { display: flex; flex-direction: column; flex: 1; line-height: 1.15; }
+.lm-text b { font-size: 1rem; font-weight: 800; }
+.lm-text small { font-size: .78rem; color: var(--ink-2); font-weight: 600; }
+.lm-check { width: 10px; height: 17px; margin-right: 4px; flex: none; }
+[aria-checked="true"] .lm-check { border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink); transform: rotate(45deg) translate(-2px, -2px); }
 
 .pill {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
@@ -373,6 +396,68 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
 }
 @keyframes fall { to { transform: translate3d(var(--dx), 110vh, 0) rotate(var(--rot)); } }
 
+/* ---------- Animaciones ----------
+   Los keyframes solo definen el punto de partida: cada elemento termina en su
+   propio transform (las rotaciones de pegatina se conservan). */
+@keyframes rise { from { opacity: 0; transform: translateY(26px); } }
+@keyframes drop-in {
+  from { opacity: 0; transform: translateY(-34px) rotate(-14deg); }
+  60% { opacity: 1; transform: translateY(4px) rotate(-1deg); }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(.4) rotate(-8deg); }
+  70% { opacity: 1; transform: scale(1.08) rotate(-3deg); }
+}
+@keyframes slide-in { from { opacity: 0; transform: translateX(70px) rotate(4deg); } }
+@keyframes float { 50% { translate: 0 -14px; } }
+@keyframes meet-left { from { translate: -12px 0; } }
+@keyframes meet-right { from { translate: 12px 0; } }
+
+/* Logo: los dos círculos se juntan al cargar */
+.logo-mark i:first-child { animation: meet-left .7s cubic-bezier(.2, .9, .3, 1.3) both; }
+.logo-mark i:last-child { animation: meet-right .7s cubic-bezier(.2, .9, .3, 1.3) both; }
+
+/* Formas del fondo flotando */
+.deco .d1 { animation: float 7s ease-in-out infinite; }
+.deco .d2 { animation: float 9s ease-in-out -3s infinite; }
+.deco .d3 { animation: float 6s ease-in-out -1s infinite; }
+
+/* Portada: entrada escalonada */
+#v-home .hero .sticker { animation: drop-in .65s cubic-bezier(.2, .9, .3, 1.2) .1s both; }
+#v-home .hero h1 { animation: rise .6s ease-out .2s both; }
+#v-home .hero h1 em { animation: pop-in .55s cubic-bezier(.2, .9, .3, 1.4) .7s both; }
+#v-home .lead { animation: rise .6s ease-out .35s both; }
+#v-home .chips li { animation: pop-in .45s cubic-bezier(.2, .9, .3, 1.4) both; }
+#v-home .chips li:nth-child(1) { animation-delay: .55s; }
+#v-home .chips li:nth-child(2) { animation-delay: .65s; }
+#v-home .chips li:nth-child(3) { animation-delay: .75s; }
+#v-home .global-stats { animation: rise .6s ease-out .9s both; }
+#v-home .start { animation: slide-in .7s cubic-bezier(.2, .9, .3, 1.1) .3s both; }
+#v-home .how { animation: rise .7s ease-out 1s both; }
+
+/* Sala de espera */
+@keyframes tile-in { from { opacity: 0; transform: translateY(-46px) rotate(-24deg); } }
+@keyframes tile-wave { 50% { translate: 0 -7px; } }
+@keyframes ping { from { transform: scale(1); opacity: .7; } to { transform: scale(1.9); opacity: 0; } }
+@keyframes wobble { 0%, 100% { rotate: 0deg; } 25% { rotate: -12deg; } 75% { rotate: 12deg; } }
+@keyframes dot-jump { 0%, 60%, 100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+.lobby-spinner { transform: scale(.8); margin: -4px 0 -8px; }
+.code span { animation: tile-in .5s cubic-bezier(.2, .9, .3, 1.3) calc(var(--i, 0) * 70ms) both; }
+.lobby.waiting .code span {
+  animation: tile-in .5s cubic-bezier(.2, .9, .3, 1.3) calc(var(--i, 0) * 70ms) both,
+             tile-wave 2.4s ease-in-out calc(.6s + var(--i, 0) * 150ms) infinite;
+}
+.players li.joined { animation: pop-in .5s cubic-bezier(.2, .9, .3, 1.4) both; }
+.players li.empty .avatar { position: relative; animation: wobble 2s ease-in-out infinite; }
+.players li.empty .avatar::after {
+  content: ""; position: absolute; inset: -3px; border: 2px solid var(--ink); border-radius: 50%;
+  animation: ping 1.6s ease-out infinite;
+}
+.dots i { display: inline-block; font-style: normal; animation: dot-jump 1.2s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 860px) {
   .home-grid { grid-template-columns: 1fr; gap: 34px; padding-top: 8px; }
@@ -385,8 +470,13 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
   .logo-text small { display: none; }
   .pill { font-size: .78rem; padding: 5px 10px; }
   .answer-row, .next-btns { flex-direction: column; }
-  .lang select { padding: 5px 26px 5px 11px; font-size: .82rem; }
-  .lang::after { right: 11px; }
+  /* En el móvil la píldora de la sala queda en una línea: código y punto de conexión (los textos siguen para lectores de pantalla) */
+  .pill { flex-wrap: nowrap; gap: 6px; padding: 5px 10px; }
+  .pill-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .lang-btn { padding: 5px 10px 5px 7px; font-size: .82rem; gap: 5px; }
+  .lang-name { display: none; }
+  .lang-code { display: inline; }
+  .lang-menu { width: min(230px, calc(100vw - 32px)); }
   .timer { width: 78px; height: 78px; }
   .timer::after { inset: 14px; }
   .timer span { font-size: 1.3rem; }

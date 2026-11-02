@@ -50,17 +50,23 @@
     </a>
     <div class="top-right">
       <div class="pill" id="room-pill" hidden>
-        <span data-i18n="pill_room">Sala</span> <b id="room-pill-code"></b>
-        <span class="live"><span class="dot"></span><span id="conn-label" data-i18n="conn_online">en línea</span></span>
+        <span class="pill-label" data-i18n="pill_room">Sala</span> <b id="room-pill-code"></b>
+        <span class="live"><span class="dot"></span><span class="pill-label" id="conn-label" data-i18n="conn_online">en línea</span></span>
       </div>
-      <label class="lang">
-        <span class="sr-only" data-i18n="lang_label">Language</span>
-        <select id="lang-select">
-          <option value="en">English</option>
-          <option value="es">Español</option>
-          <option value="zh">中文</option>
-        </select>
-      </label>
+      <div class="lang" id="lang">
+        <button class="lang-btn" id="lang-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="lang-menu">
+          <svg class="globe" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c2.6 2.8 3.9 6 3.9 9.5s-1.3 6.7-3.9 9.5M12 2.5C9.4 5.3 8.1 8.5 8.1 12s1.3 6.7 3.9 9.5"/></svg>
+          <span class="lang-name" id="lang-name">English</span>
+          <span class="lang-code" id="lang-code">EN</span>
+          <i class="chev" aria-hidden="true"></i>
+        </button>
+        <!-- Cada idioma aparece escrito en su propio idioma, con el nombre del juego en ese idioma -->
+        <ul class="lang-menu" id="lang-menu" role="menu" hidden>
+          <li role="none"><button type="button" role="menuitemradio" data-lang="en" lang="en" aria-checked="false"><span class="lm-code">EN</span><span class="lm-text"><b>English</b><small>Same Word</small></span><i class="lm-check" aria-hidden="true"></i></button></li>
+          <li role="none"><button type="button" role="menuitemradio" data-lang="es" lang="es" aria-checked="false"><span class="lm-code">ES</span><span class="lm-text"><b>Español</b><small>Misma Palabra</small></span><i class="lm-check" aria-hidden="true"></i></button></li>
+          <li role="none"><button type="button" role="menuitemradio" data-lang="zh" lang="zh-CN" aria-checked="false"><span class="lm-code">中</span><span class="lm-text"><b>中文</b><small>想到一块儿</small></span><i class="lm-check" aria-hidden="true"></i></button></li>
+        </ul>
+      </div>
     </div>
   </header>
 
@@ -173,6 +179,7 @@
     <section class="view center-view" id="v-lobby" hidden>
       <div class="card center lobby">
         <span class="sticker yellow" id="lobby-tag"></span>
+        <div class="spinner lobby-spinner" id="lobby-spinner" aria-hidden="true"><i></i><i></i></div>
         <h2 data-i18n="lobby_title">Esperando jugadores</h2>
         <p class="sub" id="lobby-text"></p>
         <div class="code" id="lobby-code" data-i18n-aria="code_aria" aria-label="Código de sala"></div>

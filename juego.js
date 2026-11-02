@@ -86,7 +86,7 @@ function paintText(sel) {
 
 function applyLang() {
   document.documentElement.lang = LOCALES[lang];
-  $('#lang-select').value = lang;
+  paintLangPicker();
   document.title = t('doc_title');
   $('meta[name="description"]').content = t('doc_desc');
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
@@ -96,6 +96,75 @@ function applyLang() {
   for (const sel of dynamic.keys()) paintText(sel);
   renderGlobalStats();
   render();
+}
+
+/* ---------- Selector de idioma ---------- */
+
+// Cada idioma se muestra siempre escrito en su propio idioma.
+const LANG_NAMES = { en: 'English', es: 'Español', zh: '中文' };
+const LANG_CODES = { en: 'EN', es: 'ES', zh: '中' };
+
+function setLang(next) {
+  if (!LANGS.includes(next) || next === lang) return;
+  lang = next;
+  save('mp-lang', lang);
+  // Quien elige idioma a mano manda sobre el ?lang= del enlace por el que entró.
+  const params = new URLSearchParams(location.search);
+  if (params.has('lang')) {
+    params.delete('lang');
+    history.replaceState(null, '', location.pathname + (params.size ? `?${params}` : ''));
+  }
+  applyLang();
+}
+
+function paintLangPicker() {
+  $('#lang-name').textContent = LANG_NAMES[lang];
+  $('#lang-code').textContent = LANG_CODES[lang];
+  $('#lang-btn').setAttribute('aria-label', `${t('lang_label')}: ${LANG_NAMES[lang]}`);
+  for (const item of document.querySelectorAll('#lang-menu [data-lang]')) {
+    item.setAttribute('aria-checked', String(item.dataset.lang === lang));
+  }
+}
+
+function setupLangPicker() {
+  const btn = $('#lang-btn');
+  const menu = $('#lang-menu');
+  const items = () => [...menu.querySelectorAll('[data-lang]')];
+
+  const open = () => {
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    (items().find((item) => item.dataset.lang === lang) ?? items()[0]).focus();
+  };
+  const close = (refocus) => {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    if (refocus) btn.focus();
+  };
+
+  btn.addEventListener('click', () => (menu.hidden ? open() : close(false)));
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(); }
+  });
+  menu.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-lang]');
+    if (!item) return;
+    setLang(item.dataset.lang);
+    close(true);
+  });
+  menu.addEventListener('keydown', (e) => {
+    const list = items();
+    const i = list.indexOf(document.activeElement);
+    const go = (n) => { e.preventDefault(); list[(n + list.length) % list.length].focus(); };
+    if (e.key === 'ArrowDown') go(i + 1);
+    else if (e.key === 'ArrowUp') go(i - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(list.length - 1);
+    else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+    else if (e.key === 'Tab') close(false);
+  });
+  document.addEventListener('pointerdown', (e) => { if (!$('#lang').contains(e.target)) close(false); });
 }
 
 /* ---------- Contador global (portada) ---------- */
@@ -226,7 +295,7 @@ function leave(key, params) {
 /* ---------- Estado local e interfaz ---------- */
 
 const app = {
-  room: null, globalStats: null, offset: 0, roundKey: null, myWord: null, pending: false, closed: false, celebrated: null,
+  room: null, globalStats: null, lobbySeen: null, offset: 0, roundKey: null, myWord: null, pending: false, closed: false, celebrated: null,
 };
 
 const VIEWS = ['home', 'connecting', 'lobby', 'think', 'reveal', 'won', 'closed'];
@@ -313,13 +382,28 @@ function renderLobby() {
   $('#lobby-text').textContent = missing > 0
     ? t('lobby_wait', { n: R.players.length, max: R.settings.max })
     : t('lobby_full');
-  $('#lobby-code').innerHTML = [...R.code].map((c) => `<span>${esc(c)}</span>`).join('');
+  // Mientras falta gente, el logo busca y las letras del código ondean.
+  $('#v-lobby .lobby').classList.toggle('waiting', missing > 0);
+  $('#lobby-spinner').hidden = missing <= 0;
+  // Las letras caen al aparecer el código, no en cada actualización de la sala.
+  if ($('#lobby-code').dataset.code !== R.code) {
+    $('#lobby-code').dataset.code = R.code;
+    $('#lobby-code').innerHTML = [...R.code].map((c, i) => `<span style="--i:${i}">${esc(c)}</span>`).join('');
+  }
 
+  // Quien acaba de entrar aparece con un rebote.
+  if (app.lobbySeen?.code !== R.code) app.lobbySeen = { code: R.code, ids: new Set() };
+  const seen = app.lobbySeen.ids;
   let html = R.players.map((p) => {
     const tags = [p.id === me.id && t('you'), p.id === R.hostId && t('host_tag'), !p.online && t('st_off')].filter(Boolean);
-    return `<li class="${p.online ? '' : 'offline'}">${avatar(p)}<span>${esc(p.name)}${tags.map((x) => ` <small>${esc(x)}</small>`).join('')}</span></li>`;
+    const classes = [p.online ? '' : 'offline', seen.has(p.id) ? '' : 'joined'].join(' ');
+    seen.add(p.id);
+    return `<li class="${classes}">${avatar(p)}<span>${esc(p.name)}${tags.map((x) => ` <small>${esc(x)}</small>`).join('')}</span></li>`;
   }).join('');
-  for (let i = 0; i < missing; i++) html += `<li class="empty"><span class="avatar">?</span>${esc(t('waiting_slot'))}</li>`;
+  const waitingWord = esc(t('waiting_slot').replace(/[.…。]+$/, ''));
+  for (let i = 0; i < missing; i++) {
+    html += `<li class="empty"><span class="avatar">?</span><span>${waitingWord}<span class="dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></span></li>`;
+  }
   $('#lobby-players').innerHTML = html;
 
   $('#lobby-score').hidden = !R.stats?.played;
@@ -597,17 +681,7 @@ function init() {
   setupSeg('#seg-time', (v) => { $('#custom-wrap').hidden = v !== 'custom'; });
   setupSeg('#seg-players');
 
-  $('#lang-select').addEventListener('change', (e) => {
-    if (!LANGS.includes(e.target.value)) return;
-    lang = e.target.value;
-    save('mp-lang', lang);
-    const params = new URLSearchParams(location.search);
-    if (params.has('lang')) {
-      params.delete('lang');
-      history.replaceState(null, '', location.pathname + (params.size ? `?${params}` : ''));
-    }
-    applyLang();
-  });
+  setupLangPicker();
 
   $('#btn-create').addEventListener('click', () => {
     if (!readName()) return;
