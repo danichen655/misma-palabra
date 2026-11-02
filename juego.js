@@ -10,7 +10,7 @@ import { TEXTS } from './textos.js';
 import { canAgree, cleanName, cleanWord, isCode, norm, randomCode, usedWords, wordError } from './reglas.js';
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
-const SERVER = LOCAL ? `ws://${location.hostname}:8787` : 'wss://misma-palabra.TU-SUBDOMINIO.workers.dev';
+const SERVER = LOCAL ? `ws://${location.hostname}:8787` : 'wss://misma-palabra.misma-palabra.workers.dev';
 const PING_MS = 25000;
 const STALE_MS = 60000;
 const SHARE_ROUNDS = 8;
