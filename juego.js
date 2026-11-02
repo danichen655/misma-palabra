@@ -104,8 +104,8 @@ async function loadGlobalStats() {
 
 function renderGlobalStats() {
   const stats = app.globalStats;
-  $('#global-stats').hidden = !stats?.played;
-  if (!stats?.played) return;
+  $('#global-stats').hidden = !stats;
+  if (!stats) return;
   const fmt = new Intl.NumberFormat(lang === 'zh' ? 'zh-CN' : 'es-ES');
   $('#gs-played').textContent = fmt.format(stats.played);
   $('#gs-matched').textContent = fmt.format(stats.matched);
