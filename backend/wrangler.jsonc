@@ -1,0 +1,12 @@
+// Servidor de salas: npm run servidor (local) · npm run desplegar (Cloudflare)
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "misma-palabra",
+  "main": "sala.js",
+  "compatibility_date": "2025-09-01",
+  "durable_objects": {
+    "bindings": [{ "name": "SALAS", "class_name": "Sala" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Sala"] }],
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "misma-palabra",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "web": "node servidor.cjs",
+    "servidor": "wrangler dev -c backend/wrangler.jsonc --port 8787",
+    "desplegar": "wrangler deploy -c backend/wrangler.jsonc"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.2"
+  }
+}

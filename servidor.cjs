@@ -1,4 +1,5 @@
-// Servidor estático mínimo para probar el juego en local: node servidor.js [puerto]
+// Servidor estático mínimo para probar la web en local: node servidor.cjs [puerto]
+// (las salas las sirve aparte el servidor de Cloudflare: npm run servidor)
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

@@ -1,12 +1,10 @@
-'use strict';
-
 /*
  * Textos de la interfaz en español y chino simplificado.
  * Los valores pueden llevar {parámetros}; los que son funciones reciben
  * el objeto de parámetros y devuelven el texto ya montado.
  */
 
-const TEXTS = {
+export const TEXTS = {
   es: {
     doc_title: 'Misma Palabra · juego de asociación online',
     doc_desc: 'Cada uno piensa una palabra y se revelan a la vez. ¿En qué ronda pensaréis la misma? Juego de asociación para jugar online con amigos.',
@@ -14,7 +12,7 @@ const TEXTS = {
     brand_sub: 'juego de asociación',
     pill_room: 'Sala',
     conn_online: 'en línea',
-    conn_off: 'sin conexión',
+    conn_reconnecting: 'reconectando…',
     lang_btn: '中文',
     lang_aria: 'Ver en chino',
 
@@ -60,7 +58,7 @@ const TEXTS = {
     join_timeout: 'No se pudo conectar con la sala {code}.',
     no_room: 'No hay ninguna sala abierta con el código {code}.',
     net_fail: 'No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.',
-    no_peer: 'No se pudo cargar el módulo de conexión. Comprueba tu conexión a internet y recarga.',
+    offline_msg: 'Sin conexión. Reconectando… vuelve a enviarla en un momento.',
     err_started: 'La partida de esta sala ya ha empezado.',
     err_full: 'La sala está llena.',
     need_name: 'Escribe tu nombre primero.',
@@ -133,8 +131,9 @@ const TEXTS = {
     exit: 'Salir al inicio',
 
     closed_sticker: 'Vaya…',
-    closed_title: 'La sala se ha cerrado',
-    closed_text: 'El anfitrión ha salido o se ha perdido la conexión.',
+    replaced_title: 'Sala abierta en otro sitio',
+    replaced_text: 'Has abierto esta sala en otra pestaña o dispositivo, así que aquí se ha pausado.',
+    btn_reclaim: 'Jugar aquí',
     btn_home: 'Volver al inicio',
     footer: 'Misma Palabra · un juego para pensar a la vez',
   },
@@ -146,7 +145,7 @@ const TEXTS = {
     brand_sub: '联想小游戏',
     pill_room: '房间',
     conn_online: '实时连接',
-    conn_off: '连接已断开',
+    conn_reconnecting: '重新连接中…',
     lang_btn: 'ES',
     lang_aria: '切换到西班牙语',
 
@@ -192,7 +191,7 @@ const TEXTS = {
     join_timeout: '无法连接到房间 {code}。',
     no_room: '找不到房间码为 {code} 的房间。',
     net_fail: '连接失败，请检查网络后重试。',
-    no_peer: '联机组件加载失败，请检查网络后刷新页面。',
+    offline_msg: '连接断开，正在重新连接…请稍后再提交。',
     err_started: '这个房间的游戏已经开始了。',
     err_full: '房间已满。',
     need_name: '请先写下你的昵称。',
@@ -265,8 +264,9 @@ const TEXTS = {
     exit: '回到首页',
 
     closed_sticker: '哎呀…',
-    closed_title: '房间已关闭',
-    closed_text: '房主已离开，或者连接中断了。',
+    replaced_title: '房间已在别处打开',
+    replaced_text: '你在另一个标签页或设备上打开了这个房间，这里已暂停。',
+    btn_reclaim: '在这里继续玩',
     btn_home: '回到首页',
     footer: '想到一块儿 · 一起联想的小游戏',
   },

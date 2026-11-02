@@ -1,46 +1,40 @@
-'use strict';
-
 /*
- * Misma Palabra — juego de asociación multijugador.
- * Sin servidor propio: el navegador que crea la sala hace de anfitrión y
- * los demás se conectan a él por WebRTC (PeerJS). El anfitrión guarda el
- * estado de la partida y lo reenvía a todos tras cada cambio; las palabras
- * de la ronda en curso solo las conoce él hasta el momento de revelarlas.
- * Los mensajes viajan como claves de texto, así cada jugador los ve en su idioma.
+ * Misma Palabra — interfaz del juego.
+ * Las salas viven en el servidor (backend/sala.js, Cloudflare Durable Objects):
+ * cada jugador se conecta por WebSocket, recibe el estado completo tras cada
+ * cambio y envía sus acciones. Si se corta la conexión (cobertura, cambiar de
+ * app en el móvil, recargar), la web vuelve a conectarse sola a la misma sala.
  */
 
-const PREFIX = 'misma-palabra-v1-';
-const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const COLORS = ['#ff5b3a', '#4f6bff', '#ffc93c', '#2fbf83', '#ff9fcb', '#b18cff'];
-const REVEAL_MS = 15000;
-const MAX_WORD = 24;
+import { TEXTS } from './textos.js';
+import { canAgree, cleanName, cleanWord, isCode, norm, randomCode, usedWords, wordError } from './reglas.js';
+
+const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+const SERVER = LOCAL ? `ws://${location.hostname}:8787` : 'wss://misma-palabra.TU-SUBDOMINIO.workers.dev';
+const PING_MS = 25000;
+const STALE_MS = 60000;
+const SHARE_ROUNDS = 8;
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function storage(kind) {
-  try { return kind === 'session' ? window.sessionStorage : window.localStorage; } catch { return null; }
+function load(key) {
+  try { return window.localStorage.getItem(key); } catch { return null; }
 }
-function load(kind, key) {
-  try { return storage(kind)?.getItem(key) ?? null; } catch { return null; }
-}
-function save(kind, key, value) {
-  try { storage(kind)?.setItem(key, value); } catch { /* sin almacenamiento */ }
+function save(key, value) {
+  try { window.localStorage.setItem(key, value); } catch { /* sin almacenamiento */ }
 }
 
-function randomCode() {
-  let out = '';
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
-  return out;
+const me = { id: null, name: load('mp-name') || '' };
+
+function newId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Identificador por pestaña: sobrevive a recargar, pero dos pestañas son dos jugadores.
-const me = {
-  id: load('session', 'mp-id') || crypto.getRandomValues(new Uint32Array(2)).join('-'),
-  name: load('local', 'mp-name') || '',
-};
-save('session', 'mp-id', me.id);
+// Recuerda con qué identidad entraste en la última sala para poder volver a ella.
+function savedRoom() {
+  try { return JSON.parse(load('mp-sala') || 'null'); } catch { return null; }
+}
 
 /* ---------- Idioma ---------- */
 
@@ -48,7 +42,7 @@ let lang = (() => {
   // Un enlace compartido desde la versión china lleva ?lang=zh.
   const fromUrl = new URLSearchParams(location.search).get('lang');
   if (fromUrl === 'es' || fromUrl === 'zh') return fromUrl;
-  const saved = load('local', 'mp-lang');
+  const saved = load('mp-lang');
   if (saved === 'es' || saved === 'zh') return saved;
   return /^zh\b/i.test(navigator.language || '') ? 'zh' : 'es';
 })();
@@ -94,319 +88,115 @@ function applyLang() {
   render();
 }
 
-/* ---------- Palabras ---------- */
+/* ---------- Conexión con el servidor de salas ---------- */
 
-const ARTICLES = /^(el|la|los|las|lo|un|una|unos|unas)\s+/;
-
-// Clave de comparación: sin mayúsculas, tildes, signos ni artículo inicial (la ñ se respeta).
-function norm(word) {
-  return String(word)
-    .normalize('NFKC')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/ñ/g, 'ñ')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(ARTICLES, '');
-}
-
-function cleanWord(raw) {
-  return String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_WORD);
-}
-
-function usedWords(history) {
-  const seen = new Map();
-  for (const entry of history) {
-    for (const w of entry.words) {
-      const key = norm(w.word);
-      if (key && !seen.has(key)) seen.set(key, w.word);
-    }
-  }
-  return seen;
-}
-
-function wordError(word, history) {
-  if (!norm(word)) return { key: 'err_empty' };
-  const used = usedWords(history);
-  if (used.has(norm(word))) return { key: 'err_used', params: { word: used.get(norm(word)) } };
-  return null;
-}
-
-/* ---------- Anfitrión ---------- */
-
-const host = {
-  room: null,
-  words: {},          // palabras secretas de la ronda actual
-  conns: new Map(),   // id de jugador -> conexión
+const conn = {
+  ws: null, code: null, create: null, joined: false,
+  retries: 0, timer: null, ping: null, lastSeen: 0,
 };
 
-function startHosting(settings, attempt = 0) {
-  const code = randomCode();
-  const peer = new Peer(PREFIX + code, { debug: 0 });
+function connect() {
+  clearTimeout(conn.timer);
+  const params = new URLSearchParams({ id: me.id, nombre: me.name });
+  if (conn.create) {
+    params.set('crear', '1');
+    params.set('segundos', conn.create.seconds);
+    params.set('max', conn.create.max);
+  }
+  const ws = new WebSocket(`${SERVER}/sala/${conn.code}?${params}`);
+  conn.ws = ws;
 
-  peer.on('open', () => {
-    app.role = 'host';
-    app.peer = peer;
-    host.room = {
-      code, settings, game: 0, players: [], phase: 'lobby', round: 0,
-      endsAt: 0, revealEndsAt: 0, submitted: {}, ready: {}, agree: {},
-      history: [], winWords: [], synonym: false,
-    };
-    hostJoin(me.id, me.name, null);
-    setInterval(hostTick, 250);
-    window.addEventListener('beforeunload', (e) => {
-      if (host.room.players.length > 1) e.preventDefault();
-    });
-  });
+  ws.onopen = () => {
+    if (conn.ws !== ws) return;
+    conn.retries = 0;
+    conn.lastSeen = Date.now();
+    // Si se cortó con una palabra en camino, el estado que llega ahora dice si el servidor la recibió.
+    app.pending = false;
+    clearInterval(conn.ping);
+    conn.ping = setInterval(() => {
+      // Si el servidor lleva mucho sin contestar, la conexión está muerta aunque no lo parezca.
+      if (Date.now() - conn.lastSeen > STALE_MS) ws.close();
+      else if (ws.readyState === WebSocket.OPEN) ws.send('ping');
+    }, PING_MS);
+  };
 
-  peer.on('connection', (conn) => {
-    let pid = null;
-    conn.on('data', (msg) => {
-      if (!msg || typeof msg !== 'object') return;
-      if (msg.t === 'join') {
-        if (!pid) pid = hostJoin(String(msg.id ?? '').slice(0, 40), cleanName(msg.name), conn);
-        return;
-      }
-      if (pid) hostAction(pid, msg);
-    });
-    conn.on('close', () => {
-      if (pid && host.conns.get(pid) === conn) hostLeave(pid);
-    });
-  });
+  ws.onmessage = (e) => {
+    if (conn.ws !== ws) return;
+    conn.lastSeen = Date.now();
+    if (e.data === 'pong') return;
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    onMessage(msg);
+  };
 
-  peer.on('error', (err) => {
-    if (err.type === 'unavailable-id' && attempt < 4) {
-      peer.destroy();
-      startHosting(settings, attempt + 1);
-    } else if (!host.room) {
-      peer.destroy();
-      backHome('create_fail');
-    } else {
-      console.warn('PeerJS:', err.type, err);
+  ws.onclose = (e) => {
+    if (conn.ws !== ws) return;
+    clearInterval(conn.ping);
+    conn.ws = null;
+    if (e.code === 4001) {
+      // La sala ha rechazado la entrada.
+      if (e.reason === 'code_taken' && conn.create) { conn.code = randomCode(); connect(); return; }
+      leave(e.reason || 'net_fail', { code: conn.code });
+      return;
     }
-  });
-
-  peer.on('disconnected', () => {
-    if (!peer.destroyed) peer.reconnect();
-  });
-}
-
-function cleanName(raw) {
-  return String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 16) || '???';
-}
-
-function hostJoin(pid, name, conn) {
-  const R = host.room;
-  if (!pid) return null;
-  let player = R.players.find((p) => p.id === pid);
-  if (!player) {
-    if (R.phase !== 'lobby') return hostReject(conn, 'err_started');
-    if (R.players.length >= R.settings.max) return hostReject(conn, 'err_full');
-    const taken = new Set(R.players.map((p) => p.color));
-    const color = COLORS.find((c) => !taken.has(c)) || COLORS[R.players.length % COLORS.length];
-    player = { id: pid, name, color, online: true };
-    R.players.push(player);
-  } else {
-    player.online = true;
-    player.name = name;
-  }
-  if (conn) host.conns.set(pid, conn);
-  if (R.phase === 'lobby' && R.players.length >= R.settings.max) startGame();
-  else broadcast();
-  return pid;
-}
-
-function hostReject(conn, key) {
-  if (conn) {
-    const send = () => { conn.send({ t: 'error', key }); setTimeout(() => conn.close(), 500); };
-    conn.open ? send() : conn.on('open', send);
-  }
-  return null;
-}
-
-function hostLeave(pid) {
-  const R = host.room;
-  host.conns.delete(pid);
-  if (R.phase === 'lobby') {
-    R.players = R.players.filter((p) => p.id !== pid);
-  } else {
-    const player = R.players.find((p) => p.id === pid);
-    if (player) player.online = false;
-  }
-  if (!checkProgress()) broadcast();
-}
-
-// Solo se puede votar "es lo mismo" si todos escribieron algo en la última ronda.
-function canAgree(R) {
-  const last = R.history[R.history.length - 1];
-  return !!last && last.words.every((w) => w.word);
-}
-
-function hostAction(pid, msg) {
-  const R = host.room;
-  switch (msg.t) {
-    case 'word': {
-      if (R.phase !== 'thinking' || R.submitted[pid]) return;
-      const word = cleanWord(msg.word);
-      const err = wordError(word, R.history);
-      if (err) return reply(pid, { t: 'reject', err });
-      host.words[pid] = word;
-      R.submitted[pid] = true;
-      reply(pid, { t: 'accepted', word });
-      if (!checkProgress()) broadcast();
-      break;
+    if (e.code === 4000) { pauseHere(); return; }
+    conn.retries += 1;
+    if (!conn.joined && conn.retries > 4) {
+      leave(conn.create ? 'create_fail' : 'join_timeout', { code: conn.code });
+      return;
     }
-    case 'next':
-      if (R.phase !== 'reveal') return;
-      R.ready[pid] = true;
-      delete R.agree[pid];
-      if (!checkProgress()) broadcast();
-      break;
-    case 'agree':
-      if (R.phase !== 'reveal' || !canAgree(R)) return;
-      R.agree[pid] = true;
-      delete R.ready[pid];
-      if (!checkProgress()) broadcast();
-      break;
-    case 'start':
-      if (pid === me.id && R.phase === 'lobby' && R.players.length >= 2) startGame();
-      break;
-    case 'again':
-      if (pid !== me.id || R.phase !== 'won') return;
-      R.players = R.players.filter((p) => p.online);
-      if (R.players.length >= R.settings.max) startGame();
-      else { R.phase = 'lobby'; broadcast(); }
-      break;
+    setOnline(false);
+    conn.timer = setTimeout(connect, Math.min(10000, 500 * 2 ** conn.retries));
+  };
+}
+
+// Al volver a la pestaña (p. ej. después de mandar el enlace por WhatsApp) se reconecta enseguida.
+function wakeUp() {
+  if (!conn.code || app.closed) return;
+  if (!conn.ws) {
+    conn.retries = 0;
+    connect();
+  } else if (conn.ws.readyState === WebSocket.OPEN && Date.now() - conn.lastSeen > PING_MS) {
+    const ws = conn.ws;
+    const before = conn.lastSeen;
+    ws.send('ping');
+    setTimeout(() => { if (conn.ws === ws && conn.lastSeen === before) ws.close(); }, 3000);
   }
-}
-
-function checkProgress() {
-  const R = host.room;
-  const online = R.players.filter((p) => p.online);
-  if (R.phase === 'thinking' && online.every((p) => R.submitted[p.id])) { reveal(); return true; }
-  if (R.phase === 'reveal') {
-    if (online.every((p) => R.agree[p.id])) { winBySynonym(); return true; }
-    if (online.every((p) => R.ready[p.id] || R.agree[p.id])) { nextRound(); return true; }
-  }
-  return false;
-}
-
-function startGame() {
-  const R = host.room;
-  R.game += 1;
-  R.round = 0;
-  R.history = [];
-  R.winWords = [];
-  R.synonym = false;
-  nextRound();
-}
-
-function nextRound() {
-  const R = host.room;
-  R.round += 1;
-  R.phase = 'thinking';
-  R.submitted = {};
-  R.ready = {};
-  R.agree = {};
-  host.words = {};
-  R.endsAt = Date.now() + R.settings.seconds * 1000;
-  broadcast();
-}
-
-function reveal() {
-  const R = host.room;
-  const words = R.players.map((p) => ({ id: p.id, name: p.name, color: p.color, word: host.words[p.id] || '' }));
-  R.history.push({ round: R.round, words });
-  const keys = words.map((w) => norm(w.word));
-  if (keys.length > 1 && keys.every((k) => k && k === keys[0])) {
-    R.phase = 'won';
-    R.winWords = [words[0].word];
-  } else {
-    R.phase = 'reveal';
-    R.ready = {};
-    R.agree = {};
-    R.revealEndsAt = Date.now() + REVEAL_MS;
-  }
-  broadcast();
-}
-
-function winBySynonym() {
-  const R = host.room;
-  const last = R.history[R.history.length - 1];
-  const unique = new Map();
-  for (const w of last.words) if (!unique.has(norm(w.word))) unique.set(norm(w.word), w.word);
-  R.phase = 'won';
-  R.synonym = true;
-  R.winWords = [...unique.values()];
-  broadcast();
-}
-
-function hostTick() {
-  const R = host.room;
-  if (R.phase === 'thinking' && Date.now() >= R.endsAt) reveal();
-  // Mientras alguien proponga que es lo mismo, la cuenta atrás espera a que decidan todos.
-  else if (R.phase === 'reveal' && Object.keys(R.agree).length === 0 && Date.now() >= R.revealEndsAt) nextRound();
-}
-
-function reply(pid, msg) {
-  if (pid === me.id) onMessage(msg);
-  else host.conns.get(pid)?.send(msg);
-}
-
-function broadcast() {
-  const msg = { t: 'state', room: host.room, now: Date.now() };
-  for (const conn of host.conns.values()) if (conn.open) conn.send(msg);
-  onMessage(msg);
-}
-
-/* ---------- Invitado ---------- */
-
-function joinRoom(code) {
-  showView('connecting', 'joining', { code });
-  const peer = new Peer({ debug: 0 });
-  let opened = false;
-
-  const giveUp = setTimeout(() => {
-    if (!opened) { peer.destroy(); backHome('join_timeout', { code }); }
-  }, 25000);
-
-  peer.on('open', () => {
-    const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
-    conn.on('open', () => {
-      opened = true;
-      clearTimeout(giveUp);
-      app.role = 'guest';
-      app.peer = peer;
-      app.conn = conn;
-      conn.send({ t: 'join', id: me.id, name: me.name });
-    });
-    conn.on('data', onMessage);
-    conn.on('close', () => {
-      if (opened && !app.closed) closeRoom();
-    });
-  });
-
-  peer.on('error', (err) => {
-    if (opened) { console.warn('PeerJS:', err.type, err); return; }
-    clearTimeout(giveUp);
-    peer.destroy();
-    if (err.type === 'peer-unavailable') backHome('no_room', { code });
-    else backHome('net_fail');
-  });
 }
 
 function send(msg) {
-  if (app.role === 'host') hostAction(me.id, msg);
-  else if (app.conn?.open) app.conn.send(msg);
+  if (conn.ws?.readyState !== WebSocket.OPEN) return false;
+  conn.ws.send(JSON.stringify(msg));
+  return true;
+}
+
+function startCreate(settings) {
+  me.id = newId();
+  Object.assign(conn, { code: randomCode(), create: settings, joined: false, retries: 0 });
+  showView('connecting', 'creating');
+  connect();
+}
+
+function startJoin(code) {
+  const saved = savedRoom();
+  me.id = saved?.code === code && saved.id ? saved.id : newId();
+  Object.assign(conn, { code, create: null, joined: false, retries: 0 });
+  showView('connecting', 'joining', { code });
+  connect();
+}
+
+function leave(key, params) {
+  clearTimeout(conn.timer);
+  Object.assign(conn, { code: null, create: null, joined: false });
+  if (key === 'no_room' && savedRoom()?.code === params?.code) save('mp-sala', 'null');
+  app.room = null;
+  backHome(key, params);
 }
 
 /* ---------- Estado local e interfaz ---------- */
 
 const app = {
-  role: null, peer: null, conn: null, room: null, offset: 0,
-  roundKey: null, myWord: null, pending: false, closed: false, celebrated: null,
+  room: null, offset: 0, roundKey: null, myWord: null, pending: false, closed: false, celebrated: null,
 };
 
 const VIEWS = ['home', 'connecting', 'lobby', 'think', 'reveal', 'won', 'closed'];
@@ -419,14 +209,21 @@ function showView(name, connectingKey, params) {
 function onMessage(msg) {
   switch (msg.t) {
     case 'state':
+      if (!conn.joined) {
+        conn.joined = true;
+        conn.create = null;
+        save('mp-sala', JSON.stringify({ code: msg.room.code, id: me.id }));
+        // La URL de la sala permite volver a ella al recargar.
+        const params = new URLSearchParams(location.search);
+        params.set('sala', msg.room.code);
+        history.replaceState(null, '', `${location.pathname}?${params}`);
+      }
+      setOnline(true);
       app.offset = msg.now - Date.now();
       app.room = msg.room;
+      app.myWord = msg.mine ?? null;
+      if (msg.mine) app.pending = false;
       render();
-      break;
-    case 'accepted':
-      app.myWord = msg.word;
-      app.pending = false;
-      renderThinking();
       break;
     case 'reject':
       app.pending = false;
@@ -435,15 +232,19 @@ function onMessage(msg) {
       $('#btn-word').disabled = false;
       $('#word').focus();
       break;
-    case 'error':
-      app.closed = true;
-      app.peer?.destroy();
-      backHome(msg.key);
-      break;
   }
 }
 
 function hostNow() { return Date.now() + app.offset; }
+
+const isHost = () => app.room?.hostId === me.id;
+
+function setOnline(on) {
+  const label = $('#conn-label');
+  label.dataset.i18n = on ? 'conn_online' : 'conn_reconnecting';
+  label.textContent = t(label.dataset.i18n);
+  $('.live').classList.toggle('off', !on);
+}
 
 // Quien juega en chino comparte la entrada /zh/, así la vista previa del enlace sale en chino.
 function shareBase() {
@@ -477,19 +278,23 @@ function avatar(p) {
 function renderLobby() {
   const R = app.room;
   const missing = R.settings.max - R.players.length;
+  const online = R.players.filter((p) => p.online).length;
   $('#lobby-tag').textContent = t('lobby_tag', { max: R.settings.max, secs: R.settings.seconds });
   $('#lobby-text').textContent = missing > 0
     ? t('lobby_wait', { n: R.players.length, max: R.settings.max })
     : t('lobby_full');
   $('#lobby-code').innerHTML = [...R.code].map((c) => `<span>${esc(c)}</span>`).join('');
 
-  let html = R.players.map((p) => `<li>${avatar(p)}<span>${esc(p.name)}${p.id === me.id ? ` <small>${esc(t('you'))}</small>` : ''}${p.id === R.players[0]?.id ? ` <small>${esc(t('host_tag'))}</small>` : ''}</span></li>`).join('');
+  let html = R.players.map((p) => {
+    const tags = [p.id === me.id && t('you'), p.id === R.hostId && t('host_tag'), !p.online && t('st_off')].filter(Boolean);
+    return `<li class="${p.online ? '' : 'offline'}">${avatar(p)}<span>${esc(p.name)}${tags.map((x) => ` <small>${esc(x)}</small>`).join('')}</span></li>`;
+  }).join('');
   for (let i = 0; i < missing; i++) html += `<li class="empty"><span class="avatar">?</span>${esc(t('waiting_slot'))}</li>`;
   $('#lobby-players').innerHTML = html;
 
-  const canStart = app.role === 'host' && missing > 0 && R.players.length >= 2;
+  const canStart = isHost() && online >= 2 && online < R.settings.max;
   $('#btn-start-now').hidden = !canStart;
-  $('#btn-start-now').textContent = t('start_now', { n: R.players.length });
+  $('#btn-start-now').textContent = t('start_now', { n: online });
 }
 
 function wordChip(w) {
@@ -507,7 +312,6 @@ function renderThinking() {
 
   if (app.roundKey !== key) {
     app.roundKey = key;
-    app.myWord = null;
     app.pending = false;
     input.value = '';
     setText('#word-msg', null);
@@ -612,14 +416,12 @@ function renderWon() {
       <span class="rn">${esc(t('round_tag', { n: h.round }))}</span>
       <span class="ws">${h.words.map(wordChip).join('')}</span>
     </li>`).join('');
-  $('#btn-again').hidden = app.role !== 'host';
-  $('#w-wait').hidden = app.role === 'host';
+  $('#btn-again').hidden = !isHost();
+  $('#w-wait').hidden = isHost();
 
-  const key = `${R.game}`;
+  const key = `${R.code}:${R.game}`;
   if (app.celebrated !== key) { app.celebrated = key; confetti(); }
 }
-
-const SHARE_ROUNDS = 8;
 
 // Texto para pegar en un chat: cabecera, las rondas con sus palabras y el enlace al juego.
 function resultText() {
@@ -699,12 +501,10 @@ function confetti() {
   }
 }
 
-function closeRoom() {
+// La misma sala se ha abierto en otra pestaña o dispositivo: esta se queda en pausa.
+function pauseHere() {
   app.closed = true;
-  const label = $('#conn-label');
-  label.dataset.i18n = 'conn_off';
-  label.textContent = t('conn_off');
-  $('.live').classList.add('off');
+  setOnline(false);
   showView('closed');
 }
 
@@ -729,16 +529,15 @@ const segValue = (sel) => $(`${sel} [aria-checked="true"]`).dataset.v;
 
 function readName() {
   const input = $('#name');
-  const name = cleanName(input.value);
   if (!input.value.trim()) {
     setText('#home-msg', 'need_name');
     shake(input);
     input.focus();
     return null;
   }
-  me.name = name;
-  save('local', 'mp-name', name);
-  return name;
+  me.name = cleanName(input.value);
+  save('mp-name', me.name);
+  return me.name;
 }
 
 function readSettings() {
@@ -754,12 +553,6 @@ function readSettings() {
   return { seconds, max: Number(segValue('#seg-players')) };
 }
 
-function peerAvailable() {
-  if (typeof Peer === 'function') return true;
-  setText('#home-msg', 'no_peer');
-  return false;
-}
-
 function normalizeCode(raw) {
   return String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 }
@@ -771,7 +564,7 @@ function init() {
 
   $('#btn-lang').addEventListener('click', () => {
     lang = lang === 'es' ? 'zh' : 'es';
-    save('local', 'mp-lang', lang);
+    save('mp-lang', lang);
     const params = new URLSearchParams(location.search);
     if (params.has('lang')) {
       params.delete('lang');
@@ -781,12 +574,11 @@ function init() {
   });
 
   $('#btn-create').addEventListener('click', () => {
-    if (!readName() || !peerAvailable()) return;
+    if (!readName()) return;
     const settings = readSettings();
     if (!settings) return;
     setText('#home-msg', null);
-    showView('connecting', 'creating');
-    startHosting(settings);
+    startCreate(settings);
   });
 
   $('#join-code').addEventListener('input', (e) => { e.target.value = normalizeCode(e.target.value); });
@@ -794,22 +586,28 @@ function init() {
     e.preventDefault();
     const code = normalizeCode($('#join-code').value);
     if (!readName()) return;
-    if (code.length !== 6) {
+    if (!isCode(code)) {
       setText('#home-msg', 'bad_code');
       shake($('#join-code'));
       return;
     }
-    if (peerAvailable()) joinRoom(code);
+    startJoin(code);
   });
 
   const invited = normalizeCode(new URLSearchParams(location.search).get('sala'));
-  if (invited.length === 6) {
-    $('#start-card').classList.add('inviting');
-    $('#invite').hidden = false;
-    $('#invite-code').textContent = invited;
-    $('#join-code').value = invited;
+  if (isCode(invited)) {
+    if (savedRoom()?.code === invited && me.name) {
+      // Ya estabas en esta sala (has recargado o el móvil cerró la pestaña): vuelves directamente.
+      startJoin(invited);
+    } else {
+      $('#start-card').classList.add('inviting');
+      $('#invite').hidden = false;
+      $('#invite-code').textContent = invited;
+      $('#join-code').value = invited;
+      if (!me.name) $('#name').focus();
+    }
     $('#btn-join-invite').addEventListener('click', () => {
-      if (readName() && peerAvailable()) joinRoom(invited);
+      if (readName()) startJoin(invited);
     });
     $('#name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btn-join-invite').click(); });
     $('#btn-show-create').addEventListener('click', () => {
@@ -817,7 +615,6 @@ function init() {
       $('#invite').hidden = true;
       history.replaceState(null, '', location.pathname);
     });
-    if (!me.name) $('#name').focus();
   }
 
   $('#btn-copy').addEventListener('click', async () => {
@@ -845,17 +642,29 @@ function init() {
       shake($('#word'));
       return;
     }
+    if (!send({ t: 'word', word })) {
+      setText('#word-msg', 'offline_msg');
+      return;
+    }
     app.pending = true;
     $('#word').disabled = true;
     $('#btn-word').disabled = true;
     setText('#word-msg', null);
-    send({ t: 'word', word });
   });
 
   $('#btn-next').addEventListener('click', () => send({ t: 'next' }));
   $('#btn-agree').addEventListener('click', () => send({ t: 'agree' }));
   $('#btn-again').addEventListener('click', () => send({ t: 'again' }));
   $('#btn-share').addEventListener('click', shareResult);
+  $('#btn-reclaim').addEventListener('click', () => {
+    app.closed = false;
+    conn.retries = 0;
+    connect();
+  });
+
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wakeUp(); });
+  window.addEventListener('online', wakeUp);
+  window.addEventListener('pageshow', (e) => { if (e.persisted) wakeUp(); });
 
   applyLang();
   setInterval(tick, 200);

@@ -232,9 +232,10 @@
     <section class="view center-view" id="v-closed" hidden>
       <div class="card center">
         <span class="sticker red" data-i18n="closed_sticker">Vaya…</span>
-        <h2 data-i18n="closed_title">La sala se ha cerrado</h2>
-        <p class="sub" data-i18n="closed_text">El anfitrión ha salido o se ha perdido la conexión.</p>
-        <a class="btn primary" href="./" data-i18n="btn_home">Volver al inicio</a>
+        <h2 data-i18n="replaced_title">Sala abierta en otro sitio</h2>
+        <p class="sub" data-i18n="replaced_text">Has abierto esta sala en otra pestaña o dispositivo, así que aquí se ha pausado.</p>
+        <button class="btn primary" id="btn-reclaim" type="button" data-i18n="btn_reclaim">Jugar aquí</button>
+        <a class="link" href="./" data-i18n="btn_home">Volver al inicio</a>
       </div>
     </section>
   </main>
@@ -242,8 +243,6 @@
   <footer class="foot" data-i18n="footer">Misma Palabra · un juego para pensar a la vez</footer>
   <div class="confetti" id="confetti" aria-hidden="true"></div>
 
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="textos.js"></script>
-  <script src="juego.js"></script>
+  <script type="module" src="juego.js"></script>
 </body>
 </html>
