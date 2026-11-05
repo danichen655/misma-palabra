@@ -102,7 +102,7 @@ function applyLang() {
 
 /* ---------- Música de fondo ---------- */
 
-const music = createMusic('relajante');
+const music = createMusic('tension');
 let musicOn = load('mp-music') !== 'off';
 
 function paintMusic() {
