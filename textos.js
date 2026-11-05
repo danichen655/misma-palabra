@@ -14,8 +14,6 @@ export const TEXTS = {
     conn_online: 'en línea',
     conn_reconnecting: 'reconectando…',
     lang_label: 'Idioma',
-    music_mute: 'Silenciar la música',
-    music_play: 'Poner música',
 
     hero_sticker: '¿No coincidís? ¡Otra ronda!',
     hero_title: '¿En qué ronda pensaréis la <em>misma</em> palabra?',
@@ -156,8 +154,6 @@ export const TEXTS = {
     conn_online: '实时连接',
     conn_reconnecting: '重新连接中…',
     lang_label: '语言',
-    music_mute: '关闭音乐',
-    music_play: '打开音乐',
 
     hero_sticker: '没想到一块儿？再来一轮！',
     hero_title: '你们会在第几轮想到<em>同一个</em>词？',
@@ -298,8 +294,6 @@ export const TEXTS = {
     conn_online: 'online',
     conn_reconnecting: 'reconnecting…',
     lang_label: 'Language',
-    music_mute: 'Mute music',
-    music_play: 'Play music',
 
     hero_sticker: 'No match? Another round!',
     hero_title: 'In which round will you think of the <em>same</em> word?',

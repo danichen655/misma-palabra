@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
 const files = [
-  'index.html', 'estilo.css', 'juego.js', 'textos.js', 'reglas.js', 'musica.js',
+  'index.html', 'estilo.css', 'juego.js', 'textos.js', 'reglas.js',
   ...readdirSync(root).filter((f) => /^compartir-\w+\.png$/.test(f)),
   'es/index.html', 'zh/index.html',
 ];

@@ -7,7 +7,6 @@
  */
 
 import { LANGS, TEXTS } from './textos.js';
-import { createMusic } from './musica.js';
 import { canAgree, cleanName, cleanWord, isCode, norm, randomCode, usedWords, wordError } from './reglas.js';
 
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
@@ -96,49 +95,7 @@ function applyLang() {
   for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', t(el.dataset.i18nAria));
   for (const sel of dynamic.keys()) paintText(sel);
   renderGlobalStats();
-  paintMusic();
   render();
-}
-
-/* ---------- Música de fondo ---------- */
-
-const music = createMusic('tension');
-let musicOn = load('mp-music') !== 'off';
-
-function paintMusic() {
-  const btn = $('#btn-music');
-  btn.classList.toggle('off', !musicOn);
-  btn.classList.toggle('playing', musicOn && music.playing);
-  btn.setAttribute('aria-pressed', String(musicOn));
-  const label = t(musicOn ? 'music_mute' : 'music_play');
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
-}
-
-function setupMusic() {
-  // Los navegadores solo dejan sonar audio después de que la persona toque la página o pulse una tecla.
-  const unlock = (e) => {
-    if (e.target.closest?.('#btn-music')) return;
-    document.removeEventListener('pointerdown', unlock);
-    document.removeEventListener('keydown', unlock);
-    if (musicOn) music.start();
-    paintMusic();
-  };
-  document.addEventListener('pointerdown', unlock);
-  document.addEventListener('keydown', unlock);
-
-  $('#btn-music').addEventListener('click', () => {
-    // Si estaba activada pero aún no sonaba (nadie había tocado la página), el primer toque la arranca.
-    if (musicOn && !music.playing) {
-      music.start();
-    } else {
-      musicOn = !musicOn;
-      save('mp-music', musicOn ? 'on' : 'off');
-      if (musicOn) music.start();
-      else music.stop();
-    }
-    paintMusic();
-  });
 }
 
 /* ---------- Selector de idioma ---------- */
@@ -744,7 +701,6 @@ function init() {
   setupSeg('#seg-players');
 
   setupLangPicker();
-  setupMusic();
 
   $('#btn-create').addEventListener('click', () => {
     if (!readName()) return;

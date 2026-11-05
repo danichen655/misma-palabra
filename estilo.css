@@ -119,27 +119,6 @@ main { flex: 1; width: 100%; max-width: 1120px; margin: 0 auto; padding: 8px 16p
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 14px;
   text-align: center; color: var(--muted); font-size: .82rem; padding: 18px 16px 26px;
 }
-.foot { padding-bottom: 84px; }   /* deja sitio al botón de música fijo */
-
-/* Botón de música: fijo en la esquina, en todas las pantallas */
-@keyframes waves { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-.music {
-  position: fixed; right: 16px; bottom: 16px; z-index: 40;
-  display: grid; place-items: center; width: 52px; height: 52px; padding: 0; cursor: pointer;
-  background: var(--mustard); border: var(--line); border-radius: 50%; box-shadow: var(--shadow-sm);
-  transition: transform .08s, box-shadow .08s, background .15s;
-}
-.music:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--ink); }
-.music:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--ink); }
-.music svg { width: 26px; height: 26px; fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.music .speaker { fill: var(--white); }
-.music .cross { display: none; }
-.music.playing .waves { animation: waves 1.6s ease-in-out infinite; }
-.music.off { background: var(--white); }
-.music.off .speaker { fill: var(--paper); }
-.music.off .waves { display: none; }
-.music.off .cross { display: block; }
-
 .foot .credit {
   font-weight: 700; color: var(--ink); background: var(--white); border: 2px solid var(--ink);
   border-radius: 999px; padding: .2em .8em; transform: rotate(-2deg);
@@ -559,7 +538,6 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
   .dots i:nth-child(3) { animation-delay: .4s !important; }
   .spinner i { animation: blink 1.4s ease-in-out infinite !important; }
   .spinner i:last-child { animation-delay: .7s !important; }
-  .music.playing .waves { animation: waves 1.6s ease-in-out infinite !important; }
   .timer.low::after { animation: blink-red 1s infinite !important; }
   .timer.low::before { animation: blink-halo 1s infinite !important; }
   .timer.low span { animation: blink-red-text 1s infinite !important; }
