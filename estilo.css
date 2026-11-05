@@ -336,9 +336,19 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
 .timer .bar { stroke: var(--cobalt); stroke-linecap: round; stroke-dasharray: 263.9; transition: stroke-dashoffset .25s linear, stroke .3s; }
 .timer::before { content: ""; position: absolute; inset: 0; border: var(--line); border-radius: 50%; box-shadow: var(--shadow-sm); }
 .timer::after { content: ""; position: absolute; inset: 17px; border: var(--line); border-radius: 50%; }
-.timer span { position: absolute; inset: 0; display: grid; place-items: center; font-family: 'DM Mono', monospace; font-size: 1.6rem; }
+.timer span { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; font-family: 'DM Mono', monospace; font-size: 1.6rem; }
+
+/* Últimos 5 segundos: el centro parpadea en rojo cada segundo, con un halo alrededor */
+@keyframes blink-red { 0%, 49% { background: var(--tomato); } 50%, 100% { background: var(--white); } }
+@keyframes blink-red-text { 0%, 49% { color: var(--white); } 50%, 100% { color: #c2361b; } }
+@keyframes blink-halo {
+  0%, 49% { box-shadow: 0 0 0 7px rgba(255, 91, 58, .4), var(--shadow-sm); }
+  50%, 100% { box-shadow: var(--shadow-sm); }
+}
 .timer.low .bar { stroke: var(--tomato); }
-.timer.low span { color: #c2361b; animation: pulse .5s ease-in-out infinite alternate; }
+.timer.low::after { animation: blink-red 1s infinite; }
+.timer.low::before { animation: blink-halo 1s infinite; }
+.timer.low span { font-weight: 700; animation: blink-red-text 1s infinite, pulse .5s ease-in-out infinite alternate; }
 @keyframes pulse { to { transform: scale(1.15); } }
 
 .hint h3 { font-size: 1.4rem; }
@@ -550,4 +560,7 @@ input:disabled { background: #efe7d8; color: var(--ink-2); }
   .spinner i { animation: blink 1.4s ease-in-out infinite !important; }
   .spinner i:last-child { animation-delay: .7s !important; }
   .music.playing .waves { animation: waves 1.6s ease-in-out infinite !important; }
+  .timer.low::after { animation: blink-red 1s infinite !important; }
+  .timer.low::before { animation: blink-halo 1s infinite !important; }
+  .timer.low span { animation: blink-red-text 1s infinite !important; }
 }

@@ -34,6 +34,17 @@ export const STYLES = {
     melody: { notes: [62, 64, 65, 69, 70, 73, 74, 77], type: 'triangle', level: 0.07, decay: 0.7, chance: 0.5, gap: [0.5, 1.5] },
     tick: { every: 0.5, level: 0.045 },
   },
+  // Suspense: pulso grave repetido como un latido, acordes oscuros en Re menor
+  // que no terminan de resolver, reloj y notas agudas sueltas.
+  tension: {
+    volume: 0.42, bar: 4, reverb: 0.4, echo: 0.375,
+    chords: [[38, 50, 53, 57], [38, 50, 53, 58], [34, 50, 53, 58], [33, 49, 52, 57]],
+    pad: { type: 'sawtooth', cutoff: 650, level: 0.02, attack: 0.8, release: 1.5 },
+    bass: 0.07,
+    melody: { notes: [74, 76, 77, 81, 82, 85, 86], type: 'triangle', level: 0.05, decay: 1.4, chance: 0.35, gap: [0.75, 2] },
+    pulse: { every: 0.25, level: 0.09, decay: 0.18 },
+    tick: { every: 0.5, level: 0.03 },
+  },
   // Acordes luminosos (Fa lidio), destellos agudos y mucha reverberación, sin ritmo.
   espacial: {
     volume: 0.3, bar: 10, reverb: 0.8, echo: 0.5,
@@ -80,6 +91,7 @@ export function createMusic(styleName = 'relajante') {
   let nextNoteAt = 0;
   let nextBeatAt = 0;
   let beatIndex = 0;
+  const roots = [];   // nota grave de los últimos acordes programados, con su hora
 
   function setup() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -219,6 +231,31 @@ export function createMusic(styleName = 'relajante') {
     src.start(at);
   }
 
+  // Nota grave del acorde que suena en ese momento.
+  function rootAt(at) {
+    let note = roots[0]?.note ?? style.chords[0][0];
+    for (const r of roots) if (r.at <= at + 0.001) note = r.note;
+    return note;
+  }
+
+  // Latido: la nota grave del acorde repetida, seca; la primera de cada cuatro, más fuerte.
+  function pulse(at, accent) {
+    const p = style.pulse;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = freq(rootAt(at) + 12);   // una octava arriba: se oye también en altavoces de móvil
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 600;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, at);
+    gain.gain.linearRampToValueAtTime(p.level * (accent ? 1.4 : 1), at + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + p.decay);
+    osc.connect(filter).connect(gain).connect(master);
+    osc.start(at);
+    osc.stop(at + p.decay + 0.05);
+  }
+
   // Tic-tac de reloj: dos tonos alternos, secos y cortos.
   function tick(at, high) {
     const osc = ctx.createOscillator();
@@ -240,6 +277,8 @@ export function createMusic(styleName = 'relajante') {
     const until = ctx.currentTime + LOOKAHEAD;
     while (nextChordAt < until) {
       const chord = style.chords[chordIndex % style.chords.length];
+      roots.push({ at: nextChordAt, note: chord[0] });
+      if (roots.length > 4) roots.shift();
       for (const note of chord) pad(note, nextChordAt, style.bar);
       bass(chord[0] - 12, nextChordAt, style.bar);
       chordIndex += 1;
@@ -250,15 +289,24 @@ export function createMusic(styleName = 'relajante') {
       if (Math.random() < m.chance) pluck(m.notes[Math.floor(Math.random() * m.notes.length)], nextNoteAt);
       nextNoteAt += between(m.gap);
     }
-    const every = style.beat?.every ?? style.tick?.every;
-    while (every && nextBeatAt < until) {
-      if (style.beat) {
-        if (beatIndex % 4 === 0 || beatIndex % 4 === 2) kick(nextBeatAt);
-        hat(nextBeatAt + every / 2);
+    // Ritmo: la rejilla es el elemento más rápido; cada uno suena cada tantos pasos.
+    const rhythm = [style.beat?.every, style.pulse?.every, style.tick?.every].filter(Boolean);
+    const grid = rhythm.length ? Math.min(...rhythm) : 0;
+    const steps = (every) => Math.round(every / grid);
+    while (grid && nextBeatAt < until) {
+      if (style.beat && beatIndex % steps(style.beat.every) === 0) {
+        const n = beatIndex / steps(style.beat.every);
+        if (n % 4 === 0 || n % 4 === 2) kick(nextBeatAt);
+        hat(nextBeatAt + style.beat.every / 2);
       }
-      if (style.tick) tick(nextBeatAt, beatIndex % 2 === 0);
+      if (style.pulse && beatIndex % steps(style.pulse.every) === 0) {
+        pulse(nextBeatAt, beatIndex % (4 * steps(style.pulse.every)) === 0);
+      }
+      if (style.tick && beatIndex % steps(style.tick.every) === 0) {
+        tick(nextBeatAt, (beatIndex / steps(style.tick.every)) % 2 === 0);
+      }
       beatIndex += 1;
-      nextBeatAt += every;
+      nextBeatAt += grid;
     }
   }
 
@@ -314,6 +362,7 @@ export function createMusic(styleName = 'relajante') {
         const now = ctx.currentTime;
         chordIndex = 0;
         beatIndex = 0;
+        roots.length = 0;
         nextChordAt = nextNoteAt = nextBeatAt = now + 0.1;
         applyStyle();
         fadeTo(style.volume, 1.5);
